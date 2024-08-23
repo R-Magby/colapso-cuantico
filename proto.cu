@@ -25,17 +25,15 @@ __global__ double diff_adelantada(double f, float coef_a,int idx, float h,){
   }
   return df/h;
 }
-__global__ double Runge_Kutta4( double func,double func_past, double yn, double h, int Nr){
+__global__ double Runge_Kutta4_temporal( double func,double func_past, double yn, double h, int Nr){
   int id =threadIdx.x + blockDim.x*blockIdx.x;
 
-  double k1 = h * func;
-  double k2_3 = h*(func + 0.5* (func-func_past))  //interpolacion lineal
-  double k4 = h*(func +  (func-func_past))  //interpolacion lineal
-
-
-
-    return 
-
+  double k1 = h * func_past;
+  double k2_3 = h*(func_past + 0.5* (func_past-func));  //interpolacion lineal
+  double k4 = h*(func);  
+  double func_plus;
+  yn_plus = y_n + 1.0/6.0 * (k1+4.0*k2_3+k4);
+  return yn_plus
 }
 __global__ void evolution_phi( double phi, double t, double pi, double alpha, double A, double B, double dx, double dt, int Nr){
   int idx =threadIdx.x + blockDim.x*blockIdx.x;
@@ -113,12 +111,25 @@ __global__ void U_dot( double U, double Kb, double K, double A, double B, double
 __global__ void A_dot( double A, double K, double Kb, double alpha, double dt, int Nr){
 
   int idx =threadIdx.x + blockDim.x*blockIdx.x;
-    double func;
-    dr_K = 0;
-
-
+    double func, dt_A,sum_A;
+    dt_A = 0;
+    sum_A = 0;
     func= -2.0*alpha*A*(K - 2.0*Kb);
-    A=Runge_Kutta4(func);
+    float b_i[4]={1.0,2.0,2.0,1.0};
+    flaot c_i[4]={1.0,0.5,0.5,1.0};
+    float a_ij[4][4]={{0,0,0,0},{0.5,0,0,0},{0,0.5,0,0},{0,0,1.0,0}};
+    double temp,temp2,k_i,temp_sum;
+    temp2=0;
+    temp_sum=temp;
+    temp = -2.0*alpha[idx]*(K[idx] - 2.0*Kb[idx]);
+    k_i=temp*A[idx];
+    for (int i=0;i<4;i++){
+     temp2=A[idx];
+     for(int j=0;j<i;j++){
+      temp2 += a_ij[i][j]*k_i;}
+     k_i=temp*temp2;
+     temp_sum += b[i]*k_i*h*1.0/6.0;}
+    A[idx] = A[idx] + temp_sum;//pasó temporal
 }
 
 __global__ void B_dot( double B,double Kb, double alpha, double dt, int Nr){
