@@ -3,6 +3,10 @@
 #include<math.h>
 #include <time.h> 
 #include <string.h>
+__constant__ float coefficient_adelantada[11];
+__constant__ float coefficient_centrada[11];
+__constant__ float coefficient_atrasada[11];
+
 void guardar_salida_phi(double *data,int Nr, int T) {
   FILE *fp = fopen("campo_escalar_2.dat", "wb");
   fwrite(data, sizeof(double), Nr*T, fp);
@@ -44,24 +48,25 @@ void cargar_coeff_adelantada_df(float *data, int N){
 
 }
 
-__global__ void difference_tenth(double *df,double *f,float *coef_centrada,float *coef_atrasada, float *coef_adelantada, int idx, float h, int N){
+__device__ void difference_tenth(double *df,double *f, int idx, float h, int N){
   double temp;
   temp=0;
 
   if (idx<11){
     for (int m=0;m<11;m++){
-      temp += coef_adelantada[m]*f[idx+m];
+      temp += coefficient_adelantada[m]*f[idx+m];
     }
     df[idx]=temp/h; 
   }
   else if (idx > N-10){
     for (int m=-10;m<1;m++){
-      temp += coef_atrasada[-m]*f[idx+m];
+      temp += coefficient_atrasada[-m]*f[idx+m];
     }
     df[idx]=temp/h;
   }
   else{
-    for (int m=0;m<11;m++){      temp += coef_centrada[m]*f[idx-5+m];
+    for (int m=0;m<11;m++){
+      temp += coefficient_centrada[m]*f[idx-5+m];
     }
     df[idx]=temp/h;
   }
@@ -346,9 +351,18 @@ int main(){
 cargar_coeff_centradas_df(coef_centrada,11);
 cargar_coeff_atrasada_df(coef_atrasada,11);
 cargar_coeff_adelantada_df(coef_adelantada,11);
-for (int i=0;i<11;i++){
+int N_diff_tenth=11;
+for (int i=0; i < N_diff_tenth ;i++){
   printf("coef : %f\n",coef_atrasada[i]);
 }
+//cudaMalloc ((void**)cuda_coeff_adelantada, N_diff_tenth *sizeof(float) );
+//cudaMalloc ((void**)cuda_coeff_centrada, N_diff_tenth *sizeof(float) );
+//cudaMalloc ((void**)cuda_coeff_atrasada, N_diff_tenth *sizeof(float) );
+
+cudaMemcpyToSymbol(coefficient_adelantada, coeff_adelantada, sizeof(float*) * 11);
+cudaMemcpyToSymbol(coefficient_centrada coeff_centrada, sizeof(float*) * 11);
+cudaMemcpyToSymbol(coefficient_atrasada, coeff_atrasada, sizeof(float*) * 11);
+
 //condiciones iniciales
 inicial_phi(phi,dr,Nr);
 //inicial_chi(chi,phi,coef_centrada,coef_atrasada,coef_adelantada,dr,Nr);
