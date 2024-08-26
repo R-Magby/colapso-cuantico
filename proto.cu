@@ -48,29 +48,29 @@ void cargar_coeff_adelantada_df(float *data, int N){
 
 }
 
-__device__ void difference_tenth(double *df,double *f, int idx, float h, int N){
-  double temp;
+__device__ void difference_tenth(double *f, int idx, float h, int N){
+  double temp, df;
   temp=0;
 
   if (idx<11){
     for (int m=0;m<11;m++){
       temp += coefficient_adelantada[m]*f[idx+m];
     }
-    df[idx]=temp/h; 
+    df=temp/h; 
   }
   else if (idx > N-10){
     for (int m=-10;m<1;m++){
       temp += coefficient_atrasada[-m]*f[idx+m];
     }
-    df[idx]=temp/h;
+    df=temp/h;
   }
   else{
     for (int m=0;m<11;m++){
       temp += coefficient_centrada[m]*f[idx-5+m];
     }
-    df[idx]=temp/h;
+    df=temp/h;
   }
-
+return df;
 }
 /*__global__ double Runge_Kutta4_temporal( double func,double func_past, double yn, double h, int Nr){
   int id =threadIdx.x + blockDim.x*blockIdx.x;
@@ -104,11 +104,11 @@ __global__ void Kb_dot( double *Kb, double *K, double *A,double *B, double *alph
       double func,func_1,func_2,func_3, dr_Db;
 
       func_1 = 0.5 * U[idx] + 2.0 * lambda[idx] * B[idx] / A[idx] - Db[idx] - lambda[idx] - Da[idx];
-      dr_Db = 0;
+      dr_Db =differene_tenth(Db,idx,Nr);
       func_2 = -0.5 * Da[idx] * Db[idx] - 0.5*dr_Db + 0.25*Db[idx]*(U[idx] + 4.0*lambda[idx]*B[idx]/A[idx]) +A[idx]*K[idx]*Kb[idx];
       func_3 = S_A[idx] - rho[idx];
 
-      func= alpha[idx]/(A[idx] * (idx*dr) )*func_1 - alpha[idx]/A[idx]*func_2 + alpha[idx]/(2.0)*func_3;
+      func= alpha[idx]/(A[idx] * (idx*dr + epsilon) )*func_1 - alpha[idx]/A[idx]*func_2 + alpha[idx]/(2.0)*func_3;
     }
   }
     //Kb=Runge_Kutta4(func);
@@ -126,8 +126,8 @@ __global__ void K_dot( double *K, double *Kb, double *A,double *B, double *alpha
       double func,func_1,func_2,func_3, dr_Da;
 
       func_1 = K[idx]*K[idx] - 4.0*K[idx]*Kb[idx] + 6*Kb[idx]*Kb[idx];
-      dr_Da = 0;
-      func_2 = Da[idx]*Da[idx] + dr_Da + 2.0*Da[idx]/( idx*dr ) + 0.5*Da[idx]*(U[idx] + 4.0*lambda[idx]*B[idx]/A[idx]);
+      dr_Da = difference_tenth(Da,idx,Nr);
+      func_2 = Da[idx]*Da[idx] + dr_Da + 2.0*Da[idx]/( idx*dr + epsilon ) + 0.5*Da[idx]*(U[idx] + 4.0*lambda[idx]*B[idx]/A[idx]);
       func_3 = rho[idx] + S_A[idx] + 2.0*S_B[idx];
 
       func= alpha[idx]*func_1 - alpha[idx]/A[idx]*func_2 + alpha[idx]/(2.0)*func_3;
@@ -145,7 +145,7 @@ __global__ void lambda_dot( double *lambda, double *Kb, double *K,double *A, dou
   }
   else{
     double func, dr_Kb;
-    dr_Kb = 0;
+    dr_Kb = difference_tenth(Kb, idx, Nr);
 
     func= 2.0*alpha[idx]*A[idx]/B[idx]*(dr_Kb - 0.5*Db[idx]*( K[idx] - 3.0*Kb[idx] ) + 0.5*ja[idx]);
 
@@ -163,7 +163,7 @@ __global__ void U_dot( double *U, double *Kb, double *K, double *A, double *B, d
   }
   else{
     double func,func_1,func_2,func_3, dr_K;
-    dr_K = 0;
+    dr_K = difference_tenth(K, I                    dx, Nr);
     func_1 = dr_K + Da[idx]*(K[idx] - 4.0*Kb[idx]);
     func_2 = 2.0*(K[idx] -3.0*Kb[idx])*(Db[idx] - 2.0*lambda[idx]*B[idx]/A[idx]);
     func_3 = 4.0*alpha[idx]*ja[idx];
@@ -227,7 +227,7 @@ __global__ void Db_dot( double *Db,double *Kb, double *alpha, double dt, int Nr)
     else{
       double dr_func,func;
       func=alpha[idx]*Kb[idx];
-      dr_func= 0;
+      dr_func= alpha[idx]*difference_tenth(Kb,idx,Nr) + Kb[idx]*difference_tenth(alpha,idx,Nr);
     }
   }
     //B[idx]=Runge_Kutta4(-2.0*dr_func);
@@ -258,9 +258,9 @@ __global__ void Da_dot( double *Da,double *K, double *alpha, double dt, int Nr){
     }
     else{
       double func,f_alpha, dr_func;
-      f_alpha=0;
+      f_alpha=1.0/alpha[idx];
       func=alpha[idx]*f_alpha*K[idx];
-      dr_func=0;
+      dr_func=diffence_tenth(2.0*K, idx, Nr);
       //B[idx]=Runge_Kutta4(-dr_func);
     }
   }
@@ -287,22 +287,38 @@ __global__ void calculate_SB(double *SB,double *PI,double *chi, double *A, doubl
 __global__ void phi_evolution(double *phi, double *phi_t_plus, double *pi, double *A, double *B, double *alpha, float dt, int Nr, int t){
   int idx =threadIdx.x + blockDim.x*blockIdx.x;
   if (idx <Nr){
-    phi[ (t+1) * Nr + idx ] =  phi[ t * Nr + idx ] + pi[idx] * alpha[idx]/(sqrt(A[idx])*B[idx]) * dt ;
+    phi[ (t) * Nr + idx ] =  phi[ (t-1) * Nr + idx ] + pi[idx] * alpha[idx]/(sqrt(A[idx])*B[idx]) * dt ;
   }
 }
 /*
-__global__ void chi_evolution( double *chi, double *A , double *B, double *alpha, float dt, float dr, int Nr){
+__global__ void chi_evolution( double *chi, double *A , double *B, double *alpha, doble *PI, doble *diff_temp, float dt, float dr, int Nr){
   int idx =threadIdx.x + blockDim.x*blockIdx.x;
   if (idx<Nr){
-    if (idx=Nr-1){
-    }
-    else if (idx=0){
-    }
-    phi_dot_plus=alpha[ idx+1 ]*pi[ idx+1 ]/(sqrtd(A[ idx+1 ])*B[ idx+1 ]);
-    phi_dot_minus=alpha[ idx-1 ]*pi[ idx-1 ]/(sqrtd(A[ idx-1 ])*B[ idx-1 ]);
-    chi[idx]=( phi_dot_plus - phi_dot_minus )/(2.0*dr) *dt +chi[idx]; 
+     if(t==0){
+       chi[idx]=difference_tenth(phi, idx, Nr);
+}
+     else {
+      temp[idx]= alpha[idx]*PI[idx] / ( sqrt(A[idx])*B[idx]);
+      //sincronizar
+      chi[idx] = diffenrece_tenth(temp, idx, Nr);
+     //RK4
+     }
 }
 }*/
+__global__ void PI_evolution( double *chi, double *A , double *B, double *alpha, double *chi, doble *diff_temp, float dt, float dr, int Nr){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx<Nr){
+     if(t==0){
+       PI[idx]=0.0;
+}
+     else {
+      temp[idx]= idx*dr*idx*dr * alpha[idx]*B[idx] * chi[idx] / ( sqrt(A[idx]));
+      //sincronizar
+      PI[idx] = diffenrece_tenth(temp, idx, Nr) / (idx*dr*idx*dr);
+     //RK4
+     }
+}
+}
  void inicial_phi(double *phi, float dr,int Nr){
   float a=0.2;
   float std=0.015;
