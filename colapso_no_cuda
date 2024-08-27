@@ -1,0 +1,468 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<math.h>
+#include <time.h> 
+#include <string.h>
+float coefficient_adelantada[11];
+float coefficient_centrada[11];
+float coefficient_atrasada[11];
+
+void guardar_salida_phi(double *data,int Nr, int T) {
+  FILE *fp = fopen("campo_escalar_2.dat", "wb");
+  fwrite(data, sizeof(double), Nr*T, fp);
+  fclose(fp);
+}
+void guardar_salida_chi(double *data,int Nr, int T) {
+  FILE *fp = fopen("dr_campo_escalar.dat", "wb");
+  fwrite(data, sizeof(double), Nr*T, fp);
+  fclose(fp);
+}
+void cargar_coeff_centradas_df(float *data, int N){
+
+  FILE *arch;
+  arch=fopen("coeff_det_centrada.npy","rb");
+  if (arch==NULL)
+      exit(1);
+  fread( data , sizeof(float) , N , arch );
+  fclose(arch);
+
+}
+void cargar_coeff_atrasada_df(float *data, int N){
+
+  FILE *arch;
+  arch=fopen("coeff_det_atrasada.npy","rb");
+  if (arch==NULL)
+      exit(1);
+  fread( data , sizeof(float) , N , arch );
+  fclose(arch);
+
+}
+void cargar_coeff_adelantada_df(float *data, int N){
+
+  FILE *arch;
+  arch=fopen("coeff_det_adelantada.npy","rb");
+  if (arch==NULL)
+      exit(1);
+  fread( data , sizeof(float) , N , arch );
+  fclose(arch);
+
+}
+
+void difference_tenth(double *f, int idx, float h, int N){
+  double temp, df;
+  temp=0;
+
+  if (idx<11){
+    for (int m=0;m<11;m++){
+      temp += coefficient_adelantada[m]*f[idx+m];
+    }
+    df=temp/h; 
+  }
+  else if (idx > N-10){
+    for (int m=-10;m<1;m++){
+      temp += coefficient_atrasada[-m]*f[idx+m];
+    }
+    df=temp/h;
+  }
+  else{
+    for (int m=0;m<11;m++){
+      temp += coefficient_centrada[m]*f[idx-5+m];
+    }
+    df=temp/h;
+  }
+return df;
+}
+/*double Runge_Kutta4_temporal( double func,double func_past, double yn, double h, int Nr){
+  int id =threadIdx.x + blockDim.x*blockIdx.x;
+
+  double k1 = h * func_past;
+  double k2_3 = h*(func_past + 0.5* (func_past-func));  //interpolacion lineal
+  double k4 = h*(func);  
+  double func_plus,yn_plus;
+  yn_plus = yn + 1.0/6.0 * (k1+4.0*k2_3+k4);
+  return yn_plus;
+}
+void evolution_phi( double *phi, double t, double pi, double *alpha, double *A, double *B, double dx, double dt, int Nr){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+    phi[ (t+1) * Nr + idx] =( alpha /( sqrtd(A) * B )) * dt + phi[ t * Nr + idx];
+}
+void evolution_phi( double *chi, double t, double *pi, double *alpha, double *A, double *B, double dx, double dt, int Nr){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+    double func=( alpha /( sqrtd(A) * B )) * dt + phi[ t * Nr + idx];
+    dr_func=diff_centrada(func,coef_a,idx,dr);
+    chi[ (t+1) * Nr + idx] =Runge_Kutta4();
+}*/
+void Kb_dot( double Kb, double K, double A,double B, double alpha, double Db,double dr_Db, double Da,
+  double lambda, double U, double rho, double S_A, double dr, double dt, int Nr, int t){
+
+  int idx =threadIdx.x + blockDim.xblockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      Kb=0.0;
+    }
+    else{
+      double func,func_1,func_2,func_3, dr_Db;
+
+      func_1 = 0.5 * U + 2.0 * lambda * B / A - Db - lambda - Da;
+      dr_Db =differene_tenth(Db,idx,Nr);
+      func_2 = -0.5 * Da * Db - 0.5*dr_Db + 0.25*Db*(U + 4.0*lambda*B/A) +A*K*Kb;
+      func_3 = S_A - rho;
+
+      func= alpha/(A * (idx*dr + epsilon) )*func_1 - alpha/A*func_2 + alpha/(2.0)*func_3;
+    }
+  }
+    //Kb=Runge_Kutta4(func);
+}
+
+void K_dot( double K, double Kb, double A,double B, double alpha, double Db, double DA, double dr_Da,
+  double lambda, double U, double rho, double S_A, double S_B, double dr, double dt, int Nr, int t){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      K=0.0;
+    }
+    else{
+      double func,func_1,func_2,func_3;
+
+      func_1 = K*K - 4.0*K*Kb + 6*Kb*Kb;
+      func_2 = Da*Da + dr_Da + 2.0*Da/( idx*dr + epsilon ) + 0.5*Da*(U + 4.0*lambda*B/A);
+      func_3 = rho + S_A + 2.0*S_B;
+
+      func= alpha*func_1 - alpha/A*func_2 + alpha/(2.0)*func_3;
+    }
+  }
+    //Kb=Runge_Kutta4(func);
+}
+
+void lambda_dot( double lambda, double Kb, double K,double A, double B, double alpha, double Db,
+  double ja, float dr, float dt, int Nr, int t){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if(t==0){
+   lambda=(1.0-A/B)/(idx*dr);
+  }
+  else{
+    double func, dr_Kb;
+    dr_Kb = difference_tenth(Kb, idx, Nr);
+
+    func= 2.0*alpha*A/B*(dr_Kb - 0.5*Db*( K - 3.0*Kb ) + 0.5*ja);
+
+
+    //Kb=Runge_Kutta4(func);
+  }
+}
+
+void U_dot( double U, double Kb, double K, double dr_K, double A, double B, double alpha, double Db,
+  double Da, double lambda, double ja, float dr, float dt, int Nr, int t){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if(t==0){
+   U=(1.0-4.0*lambda/A);
+  }
+  else{
+    double func,func_1,func_2,func_3;
+    //dr_K = difference_tenth(K, I                    dx, Nr);
+    func_1 = dr_K + Da*(K - 4.0*Kb);
+    func_2 = 2.0*(K -3.0*Kb)*(Db - 2.0*lambda*B/A);
+    func_3 = 4.0*alpha*ja;
+
+    func= -2.0*alpha * (func_1 - func_2) - func_3;
+
+
+    //Kb=Runge_Kutta4(func);
+  }
+}
+
+void A_dot( double A, double K, double Kb, double alpha, double dt, int Nr){
+
+  int idx =threadIdx.x + blockDim.xblockIdx.x;
+    double func, dt_A,sum_A;
+    dt_A = 0;
+    sum_A = 0;
+    func= -2.0*alpha*A*(K - 2.0*Kb);
+    float b_i[4]={1.0,2.0,2.0,1.0};
+    float c_i[4]={1.0,0.5,0.5,1.0};
+    float a_ij[4][4]={{0,0,0,0},{0.5,0,0,0},{0,0.5,0,0},{0,0,1.0,0}};
+    float k_i[4];
+    double temp,temp2,temp_sum;
+    temp2=0;
+    temp_sum=temp;
+    temp = -2.0*alpha*(K - 2.0*Kb);
+    
+    for (int i=0;i<4;i++){
+     temp2=A;
+     for(int j=0;j<i;j++){
+      temp2 += a_ij[i][j]*k_i[j];}
+     k_i[i]=temp*temp2;
+     temp_sum += b_i[i]*k_i[i]*dt*1.0/6.0;}
+    A = A + temp_sum;//pasó temporal
+}
+
+void B_dot( double B,double Kb, double alpha, double dt, int Nr){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      B=1.0;
+    }
+    else{
+      double func;
+
+
+      func= -2.0*alpha*B*Kb;
+      //B=Runge_Kutta4(func);
+    }
+  }
+}
+
+void Db_dot( double Db,double Kb, double alpha, double dt, int Nr){
+
+  int idx =threadIdx.x + blockDim.xblockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      Db=0.0;
+    }
+    else{
+      double dr_func,func;
+      func=alpha*Kb;
+      dr_func= alpha*difference_tenth(Kb,idx,Nr) + Kb*difference_tenth(alpha,idx,Nr);
+    }
+  }
+    //B=Runge_Kutta4(-2.0*dr_func);
+}
+
+void alpha_dot( double alpha, double B,double K,  double dt, int Nr){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      alpha=1.0;
+    }
+    else{
+      double func,f_alpha;
+      f_alpha=0;
+      func=alpha*alpha*f_alpha*K;
+    }
+  }
+    //B=Runge_Kutta4(-func);
+}
+
+void Da_dot( double Da,double K, double alpha, double dt, int Nr){
+
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx<Nr){
+    if (t==0){
+      Da=0.0;
+    }
+    else{
+      double func,f_alpha, dr_func;
+      f_alpha=1.0/alpha;
+      func=alpha*f_alpha*K;
+      dr_func=diffence_tenth(2.0*K, idx, Nr);
+      //B=Runge_Kutta4(-dr_func);
+    }
+  }
+}
+void calculate_rho(double rho,double PI,double chi, double A, double B, int Nr, int t ){
+   int idx;
+   rho = (PI*PI / (B*B) + chi*chi)/(2.0*A);
+}
+void calculate_ja(double ja,double PI,double chi, double A, double B, int Nr, int t ){
+    int idx =threadIdx.x + blockDim.x*blockIdx.x;
+    ja = -PI*chi / (sqrt(A)*B);
+}
+void calculate_SA(double SA,double PI,double chi, double A, double B, int Nr, int t ){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  SA = (PI*PI / (B*B) + chi*chi)/(2.0*A);
+}
+void calculate_SB(double SB,double PI,double chi, double A, double B, int Nr, int t ){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  SB=(PI*PI / (B*B) - chi*chi)/(2.0*A);
+}
+  //Resolver el albertiano(phi) = 0
+  //phi_tplus=
+  //Nota: Deja todas las variables sin [], despues lo remplazas
+void phi_evolution(double phi, double phi_t_plus, double pi, double A, double B, double alpha, float dt, int Nr, int t){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  if (idx <Nr){
+    phi[ (t) * Nr + idx ] =  phi[ (t-1) * Nr + idx ] + pi * alpha/(sqrt(A)*B) * dt ;
+  }
+}
+/*
+void chi_evolution( double chi, double A , double B, double alpha, doble PI, doble diff_temp, float dt, float dr, int Nr){
+
+     if(t==0){
+       chi=difference_tenth(phi, idx, Nr);
+}
+     else {
+      temp= alpha*PI / ( sqrt(A)*B);
+      //sincronizar
+      chi = diffenrece_tenth(temp, idx, Nr);
+     //RK4
+     }
+
+}*/
+void PI_evolution( double chi, double A , double B, double alpha, double chi, doble diff_temp, float dt, float dr, int Nr){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+     if(t==0){
+       PI=0.0;
+}
+     else {
+      temp= idx*dr*idx*dr * alpha*B * chi / ( sqrt(A));
+      //sincronizar
+      PI = diffenrece_tenth(temp, idx, Nr) / (idx*dr*idx*dr);
+     //RK4
+     }
+
+}
+ void inicial_phi(double *phi, float dr,int Nr){
+  float a=0.2;
+  float std=0.015;
+  for (int i=0;i<Nr;i++){
+   phi[i]=a*exp(-( (i*dr-0.5) /std)*((i*dr-0.5) /std));
+  }
+ }
+
+void rellenar(double *f, int Nr,double num){
+  for (int i=0;i<Nr;i++){
+    f[i]=num;
+  }
+}
+
+int main(){
+  int Nr=1000;
+  int Nt=10000;
+  // Defino los array del host
+  double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U;
+  //Defino los array de device
+  double *cuda_A,*cuda_B,*cuda_alpha,*cuda_phi,*cuda_chi,*cuda_PI,*cuda_K,*cuda_Kb,*cuda_U,*cuda_lambda;
+  double *cuda_Db, *cuda_Da;
+  float *coef_centrada, *coef_adelantada, *coef_atrasada;
+  float *cuda_coef_centrada, *cuda_coef_adelantada, *cuda_coef_atrasada;
+
+  //deltas
+  float dr=1.0/Nr;
+  float dt=1.0/Nt;
+
+// mallocs
+  A=(double *)malloc(Nr*sizeof(double));
+  B=(double *)malloc(Nr*sizeof(double));
+  alpha=(double *)malloc(Nr*sizeof(double));
+  phi=(double *)malloc(Nr*sizeof(double));
+  PI=(double *)malloc(Nr*sizeof(double));
+  chi=(double *)malloc(Nr*sizeof(double));
+  lambda=(double *)malloc(Nr*sizeof(double));
+  K=(double *)malloc(Nr*sizeof(double));
+  Kb=(double *)malloc(Nr*sizeof(double));
+  U=(double *)malloc(Nr*sizeof(double));
+
+  coef_centrada=(float *)malloc(11*sizeof(float));
+  coef_atrasada=(float *)malloc(11*sizeof(float));
+  coef_adelantada=(float *)malloc(11*sizeof(float));
+
+cargar_coeff_centradas_df(coef_centrada,11);
+cargar_coeff_atrasada_df(coef_atrasada,11);
+cargar_coeff_adelantada_df(coef_adelantada,11);
+int N_diff_tenth=11;
+for (int i=0; i < N_diff_tenth ;i++){
+  printf("coef : %f\n",coef_atrasada[i]);
+}
+//cudaMalloc ((void**)cuda_coeff_adelantada, N_diff_tenth *sizeof(float) );
+//cudaMalloc ((void**)cuda_coeff_centrada, N_diff_tenth *sizeof(float) );
+//cudaMalloc ((void**)cuda_coeff_atrasada, N_diff_tenth *sizeof(float) );
+
+cudaMemcpyToSymbol(coefficient_adelantada, coeff_adelantada, sizeof(float*) * 11);
+cudaMemcpyToSymbol(coefficient_centrada coeff_centrada, sizeof(float*) * 11);
+cudaMemcpyToSymbol(coefficient_atrasada, coeff_atrasada, sizeof(float*) * 11);
+
+//condiciones iniciales
+inicial_phi(phi,dr,Nr);
+//inicial_chi(chi,phi,coef_centrada,coef_atrasada,coef_adelantada,dr,Nr);
+rellenar(PI, Nr, 0);
+rellenar(K,Nr,0.0);
+rellenar(Kb,Nr,0.0);
+//rellenar(Da,Nr,0.0);
+//rellenar(Db,Nr,0.0);
+rellenar(alpha, Nr, 1.0);
+rellenar(B,Nr,1.0);
+
+//pendiente inicial del A...
+// cuda mallocs
+guardar_salida_phi(phi,Nr,1);
+guardar_salida_chi(chi,Nr,1);
+
+
+
+cudaMalloc ((void**)cuda_phi, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_alpha, Nr*sizeof(double) );
+
+
+cudaMalloc ((void**)cuda_A, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_B, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_PI, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_chi, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_lambda, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_K, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_Kb, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_U, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_Da, Nr*sizeof(double) );
+cudaMalloc ((void**)cuda_Db, Nr*sizeof(double) );
+
+int thread=1024;
+dim3 bloque(thread);
+dim3 grid((int)ceil((float)(Nr)/thread));
+
+
+B_dot<<<grid,bloque>>>( cuda_B, cuda_Kb, cuda_alpha, dt, Nr, t);
+Db_dot<<<grid,bloque>>>( cuda_Db, cuda_Kb, cuda_alpha, dt, Nr, t);
+alpha_dot<<<grid,bloque>>>( cuda_alpha, cuda_B, cuda_K, dt, Nr, t);
+Da_dot<<<grid,bloque>>>( cuda_Da, cuda_K, cuda_alpha, dt, Nr, t);
+
+
+rellenar(A,Nr,1.0);
+rellenar(PI, Nr, 0.0);
+inicial_phi(phi,dr,Nr);
+
+
+cudaMemcpy( cuda_phi, phi, Nr*sizeof(double), cudaMemcpyHostToDevice );
+cudaMemcpy( cuda_PI, PI, Nr*sizeof(double), cudaMemcpyHostToDevice );
+cudaMemcpy( cuda_A, A, Nr*sizeof(double), cudaMemcpyHostToDevice );
+
+difference_tenth<<<grid,bloque>>>(chi,phi,dr,Nr); 
+
+
+Kb_dot<<<grid,bloque>>>( cuda_K, cuda_Kb,cuda_A,cuda_B, cuda_alpha, 
+  cuda_Db, cuda_Da, cuda_lambda,cuda_U,cuda_rho, cuda_SA, dr, dt, Nr, t);
+
+K_dot<<<grid,bloque>>>( cuda_Kb, cuda_K,cuda_A,cuda_B, cuda_alpha, 
+  cuda_Db, cuda_Da, cuda_lambda,cuda_U,cuda_rho, cuda_SA, cuda_SB, dr, dt, Nr, t);
+
+lambda_dot<<<grid,bloque>>>( cuda_lambda, cuda_Kb,cuda_K,cuda_A,cuda_B, cuda_alpha, 
+  cuda_Db, cuda_ja, dr, dt, Nr, t);
+
+U_dot<<<grid,bloque>>>( cuda_lambda, cuda_Kb,cuda_K,cuda_A,cuda_B, cuda_alpha, 
+  cuda_Db, cuda_lamda, cuda_ja, dr, dt, Nr, t);
+
+cudaMemcpy( phi, cuda_phi, Nr*sizeof(double), cudaMemcpyDeviceToHost );
+/*
+//mmcopy
+ cudaMemcpy( cuda_phi, phi, Nr*sizeof(double), cudaMemcpyHostToDevice );
+
+
+
+ for(int t=0; t<Nt;t++){
+
+
+ }
+
+ cudaMemcpy( phi, cuda_phi, Nr*sizeof(double), cudaMemcpyDeviceToHost );*/
+
+
+
+
+  free(phi);free(chi);free(PI);free(K);free(Kb);free(U);free(A);free(B);free(alpha);free(lambda);
+  /*cudaFree(cuda_phi);cudaFree(cuda_chi);cudaFree(cuda_A);cudaFree(cuda_B);cudaFree(cuda_alpha);
+  cudaFree(cuda_K);cudaFree(cuda_Kb);cudaFree(cuda_lambda);cudaFree(cuda_U);*/
+
+}
