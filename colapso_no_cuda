@@ -334,7 +334,8 @@ int main(){
   int Nr=1000;
   int Nt=10000;
   // Defino los array del host
-  double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U;
+  double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U, dr_Da, dr_Db,dr_K;
+  double *K_s,*b_i, *a_ij, *c_i;
   //Defino los array de device
   double *cuda_A,*cuda_B,*cuda_alpha,*cuda_phi,*cuda_chi,*cuda_PI,*cuda_K,*cuda_Kb,*cuda_U,*cuda_lambda;
   double *cuda_Db, *cuda_Da;
@@ -361,6 +362,13 @@ int main(){
   coef_atrasada=(float *)malloc(11*sizeof(float));
   coef_adelantada=(float *)malloc(11*sizeof(float));
 
+  K_s=(double *)malloc((4+1)*Nr*sizeof(double));
+  b_i=(double *)malloc((4+1)*Nr*sizeof(double));
+  a_ij=(double *)malloc((4+1)*sizeof(double));
+  c_i=(double *)malloc((4+1)*sizeof(double));
+
+  k_s[0]=0.0;b_i[1]=1.0/6.0
+  b_i[0]=0.0 
 cargar_coeff_centradas_df(coef_centrada,11);
 cargar_coeff_atrasada_df(coef_atrasada,11);
 cargar_coeff_adelantada_df(coef_adelantada,11);
@@ -371,10 +379,6 @@ for (int i=0; i < N_diff_tenth ;i++){
 //cudaMalloc ((void**)cuda_coeff_adelantada, N_diff_tenth *sizeof(float) );
 //cudaMalloc ((void**)cuda_coeff_centrada, N_diff_tenth *sizeof(float) );
 //cudaMalloc ((void**)cuda_coeff_atrasada, N_diff_tenth *sizeof(float) );
-
-cudaMemcpyToSymbol(coefficient_adelantada, coeff_adelantada, sizeof(float*) * 11);
-cudaMemcpyToSymbol(coefficient_centrada coeff_centrada, sizeof(float*) * 11);
-cudaMemcpyToSymbol(coefficient_atrasada, coeff_atrasada, sizeof(float*) * 11);
 
 //condiciones iniciales
 inicial_phi(phi,dr,Nr);
