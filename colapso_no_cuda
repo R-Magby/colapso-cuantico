@@ -368,7 +368,11 @@ int main(){
   c_i=(double *)malloc((4+1)*sizeof(double));
 
   k_s[0]=0.0;b_i[1]=1.0/6.0
-  b_i[0]=0.0 
+  b_i[0]=0.0;b_i[2]=1.0/3.0;b_i[3]=1.0/3.0;b_i[4]=1.0/6.0;
+  c_i[0]=0.0;c_i[1]=0.5;
+  a_ij[0]=0.0;a_ij[1]=0.5;a_ij[2]=0.5;a_ij[3]=1.0;
+
+
 cargar_coeff_centradas_df(coef_centrada,11);
 cargar_coeff_atrasada_df(coef_atrasada,11);
 cargar_coeff_adelantada_df(coef_adelantada,11);
@@ -412,18 +416,25 @@ cudaMalloc ((void**)cuda_Kb, Nr*sizeof(double) );
 cudaMalloc ((void**)cuda_U, Nr*sizeof(double) );
 cudaMalloc ((void**)cuda_Da, Nr*sizeof(double) );
 cudaMalloc ((void**)cuda_Db, Nr*sizeof(double) );
-
-int thread=1024;
-dim3 bloque(thread);
-dim3 grid((int)ceil((float)(Nr)/thread));
-
-
-B_dot<<<grid,bloque>>>( cuda_B, cuda_Kb, cuda_alpha, dt, Nr, t);
-Db_dot<<<grid,bloque>>>( cuda_Db, cuda_Kb, cuda_alpha, dt, Nr, t);
-alpha_dot<<<grid,bloque>>>( cuda_alpha, cuda_B, cuda_K, dt, Nr, t);
-Da_dot<<<grid,bloque>>>( cuda_Da, cuda_K, cuda_alpha, dt, Nr, t);
-
-
+double *K1,*K2,*K3,*K4,*K5,*K6,*K7,*K8,*K9;
+int stage=4,num_ecu=9;
+K1=(double*)malloc(sizeof(double)*( stage + 1 ));
+for(int=t;t<Nt;t++){
+for(int idx=0;idx<Nr;idx++){
+for(int s=0 ; s < stage ; s++){
+K1[s+1]=B_dot( B + a_ij[s]*K1[s], Kb + a_ij[s]*K1[s], alpha + a_ij[s]*K3[s], dt, Nr, t);
+k2[ s+1 ]=Db_dot( Db + a_ij[s]*K2[s], Kb + a_ij[s]*K1[s], alpha + a_ij[s]*K3[s], dt, Nr, t);
+k3[ s+1 ]=alpha_dot( alpha + a_ij[s]*K3[s], B + a_ij[s]*K1[s], K + a_ij[s]*K1[s], dt, Nr, t);
+k4[ s+1 ]=Da_dot( Da + a_ij[s]*K4[s], K + a_ij[s]*K1[s], alpha + a_ij[s]*K3[s], dt, Nr, t);
+k4[ s+1 ]
+k4[ s+1 ]
+k4[ s+1 ]
+k4[ s+1 ]
+k4[ s+1 ]
+k4[ s+1 ]
+}
+}
+}
 rellenar(A,Nr,1.0);
 rellenar(PI, Nr, 0.0);
 inicial_phi(phi,dr,Nr);
@@ -433,25 +444,25 @@ cudaMemcpy( cuda_phi, phi, Nr*sizeof(double), cudaMemcpyHostToDevice );
 cudaMemcpy( cuda_PI, PI, Nr*sizeof(double), cudaMemcpyHostToDevice );
 cudaMemcpy( cuda_A, A, Nr*sizeof(double), cudaMemcpyHostToDevice );
 
-difference_tenth<<<grid,bloque>>>(chi,phi,dr,Nr); 
+difference_tenth(chi,phi,dr,Nr); 
 
 
-Kb_dot<<<grid,bloque>>>( cuda_K, cuda_Kb,cuda_A,cuda_B, cuda_alpha, 
-  cuda_Db, cuda_Da, cuda_lambda,cuda_U,cuda_rho, cuda_SA, dr, dt, Nr, t);
+Kb_dot( K, Kb,A,B, alpha, 
+  Db, Da, lambda,U,rho, SA, dr, dt, Nr, t);
 
-K_dot<<<grid,bloque>>>( cuda_Kb, cuda_K,cuda_A,cuda_B, cuda_alpha, 
-  cuda_Db, cuda_Da, cuda_lambda,cuda_U,cuda_rho, cuda_SA, cuda_SB, dr, dt, Nr, t);
+K_dot( Kb, K,A,B, alpha, 
+  Db, Da, lambda,U,rho, SA, SB, dr, dt, Nr, t);
 
-lambda_dot<<<grid,bloque>>>( cuda_lambda, cuda_Kb,cuda_K,cuda_A,cuda_B, cuda_alpha, 
-  cuda_Db, cuda_ja, dr, dt, Nr, t);
+lambda_dot( lambda, Kb,K,A,B, alpha, 
+  Db, ja, dr, dt, Nr, t);
 
-U_dot<<<grid,bloque>>>( cuda_lambda, cuda_Kb,cuda_K,cuda_A,cuda_B, cuda_alpha, 
-  cuda_Db, cuda_lamda, cuda_ja, dr, dt, Nr, t);
+U_dot( lambda, Kb,K,A,B,  alpha, 
+   Db,  lamda,  ja, dr, dt, Nr, t);
 
-cudaMemcpy( phi, cuda_phi, Nr*sizeof(double), cudaMemcpyDeviceToHost );
+cudaMemcpy( phi,  phi, Nr*sizeof(double), cudaMemcpyDeviceToHost );
 /*
 //mmcopy
- cudaMemcpy( cuda_phi, phi, Nr*sizeof(double), cudaMemcpyHostToDevice );
+ cudaMemcpy(  phi, phi, Nr*sizeof(double), cudaMemcpyHostToDevice );
 
 
 
