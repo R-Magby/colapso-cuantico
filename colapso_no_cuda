@@ -225,11 +225,11 @@ float Db_dot(float *Kb, float *alpha,float *K_a,float *K_Kb,  float *a_ij,float 
   }
 
 float alpha_dot( float alpha,float K,  float dt, int Nr){
-    return -alpha*K;
+    return -1.0*alpha*K;
 }
 
 float Da_dot( float Da, float dr_K, float dt, int Nr,int t){
-      return -dr_K;
+      return -1.0*dr_K;
 }
 void calculate_rho(float *rho,float *PI,float *chi, float *A, float *B, int Nr){
   for(int idx=0;idx<Nr;idx++){
@@ -239,7 +239,7 @@ void calculate_rho(float *rho,float *PI,float *chi, float *A, float *B, int Nr){
 void calculate_ja(float *ja, float *PI, float *chi, float *A, float *B, int Nr){
   for(int idx=0;idx<Nr;idx++){
 
-    ja[idx] = -PI[idx]*chi[idx] / (sqrt(A[idx])*B[idx]);}
+    ja[idx] = -PI[idx]*chi[idx] / (sqrtf(A[idx])*B[idx]);}
 
 }
 void calculate_SA(float *SA, float *PI, float *chi, float *A, float *B, int Nr){
@@ -256,12 +256,12 @@ void calculate_SB(float *SB, float *PI, float *chi, float *A, float *B, int Nr )
 
 
 float phi_evolution(float pi, float A, float B, float alpha, float dt, int Nr, int t){
-    return pi * alpha/(sqrt(A)*B);;
+    return pi * alpha/(sqrtf(A)*B);;
 }
 float f_chi(float *A, float *B, float *alpha, float *PI,float *K_A,
   float *K_a,float *K_B,float *K_PI, float *a_ij, float dt, int idx, int s,int Nr,int t){
   return (alpha[(t-1)*Nr+idx]+dt*a_ij[s]*K_a[(s)*Nr + idx])*(PI[idx]+dt*a_ij[s]*K_PI[(s)*Nr + idx])
-  /(sqrt(A[idx]+dt*a_ij[s]*K_A[(s)*Nr + idx])*(B[idx]+dt*a_ij[s]*K_B[(s)*Nr + idx]));
+  /(sqrtf(A[idx]+dt*a_ij[s]*K_A[(s)*Nr + idx])*(B[idx]+dt*a_ij[s]*K_B[(s)*Nr + idx]));
   }
 
 float chi_evolution( float *chi, float *A, float *B, float *alpha, float *PI,float *K_A,
@@ -296,7 +296,7 @@ float f_PI(float *A, float *B, float *alpha, float *chi,float *K_A,
 
     r2=idx*dr*idx*dr;
     return  (alpha[(t-1)*Nr+idx]+dt*a_ij[s]*K_a[(s)*Nr + idx])*(B[idx]+dt*a_ij[s]*K_B[(s)*Nr + idx])*(chi[idx]+dt*a_ij[s]*K_chi[(s)*Nr + idx])*r2
-            /(sqrt(A[idx]+dt*a_ij[s]*K_A[(s)*Nr + idx]));
+            /(sqrtf(A[idx]+dt*a_ij[s]*K_A[(s)*Nr + idx]));
     }
 float PI_evolution( float *PI, float *A, float *B, float *alpha, float *chi,float *K_A,
   float *K_a,float *K_B,float *K_chi, float *a_ij, int idx, int s, float dt, float dr, int Nr,int t){
@@ -328,18 +328,18 @@ float PI_evolution( float *PI, float *A, float *B, float *alpha, float *chi,floa
   }
 }
 void inicial_phi(float *phi, float dr,int Nr){
-  float a=1.2;
+  float a=5.2;
   float std=1.5;
   for (int i=0;i<Nr;i++){
     //phi[i]=a;
-    phi[i]=a*exp(-( (i*dr-25.0) /std)*((i*dr-25.0) /std));
+    phi[i]=a*expf(-( (i*dr-0.0) /std)*((i*dr-0.0) /std));
   }
  }
 void iniciar_A(float *A,float *chi, float dr,int Nr){
   float *ks;
   ks=(float *)malloc(sizeof(float)*5);
   float sumas=0.0;
-  float A0,rs;
+  float A0,rs,chi0;
   float epsilon=0.01;
   A[0]=1.0;
   ks[0]=0.0;
@@ -353,7 +353,10 @@ void iniciar_A(float *A,float *chi, float dr,int Nr){
       else{
         rs= dr*(idx-1)+dr*c_i[s];
       }
-      ks[s+1]= A0*((1.0/rs)*(1.0-A0)+rs*chi[idx-1]*chi[idx-1]*0.5 + 0.0);
+      //ks[s+1]= A0*((1.0/rs)*(1.0-A0)+rs*chi[idx-1]*chi[idx-1]*0.5 + 0.0);
+      chi0=5.2*rs*(-2.0/(1.5*1.5))*exp(-1.0*(rs/1.5)*(rs/1.5));
+      ks[s+1]= A0*((1.0/rs)*(1.0-A0)+rs*chi0*chi0*0.5 + 0.0);
+
       sumas += b_i[s]*ks[s+1];
     }
    A[idx]=A[idx-1]+dr*sumas;
@@ -448,9 +451,9 @@ for(int idx=0;idx<Nr;idx++){
 
   lambda[idx]=lambda_dot( lambda[idx], Kb[idx] , K[idx], A[idx], B[idx], alpha[idx], Db[idx], ja[idx],0.0, dr, dt, Nr, 0);
   U[idx]=U_dot( U[idx], Kb[idx] , K[idx] , A[idx] , B[idx] ,  alpha[idx] , Db[idx] ,Da[idx],  lambda[idx] , ja[idx],0.0,dr_A0[idx], dr, dt, Nr, 0);
-  printf("r : %d\n",idx);
-  printf("U : %.15f\n",U[idx]);
-  printf("lambda : %.15f\n",lambda[idx]);
+  //printf("r : %d\n",idx);
+  //printf("U : %.15f\n",U[idx]);
+  //printf("lambda : %.15f\n",lambda[idx]);
 }
 //pendiente inicial del A...
 // cuda mallocs
@@ -502,9 +505,11 @@ for(int t=1;t<Nt;t++){
       }
       dr_Db=difference_tenth_RK( Db, K2,a_ij, idx,s, dr,Nr); 
       dr_Da=difference_tenth_RK( Da, K4,a_ij, idx,s, dr,Nr); 
-      dr_K=difference_tenth_RK(K, K6,a_ij, idx,s, dr,Nr); 
+      dr_K= difference_tenth_RK(K, K6,a_ij, idx,s, dr,Nr); 
       dr_Kb=difference_tenth_RK(Kb, K5,a_ij, idx,s, dr,Nr);
-      dr_A=difference_tenth_RK(A, K9,a_ij, idx,s, dr,Nr);
+      dr_A= difference_tenth_RK(A, K9,a_ij, idx,s, dr,Nr);
+      //if(t%1==0 && idx==Nr-1){
+      //printf("drK:%f",dr_K);}
       K1[ (s+1)*Nr + idx ]=B_dot( B[idx] + dt*a_ij[s]*K1[s*Nr +idx], Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], alpha[(t-1)*Nr+idx] + dt*a_ij[s]*K3[s*Nr +idx], dt, Nr);
       K2[ (s+1)*Nr + idx ]=Db_dot(Kb , alpha,K5,K3,a_ij, dt,dr,idx,s, Nr, t);
       K3[ (s+1)*Nr + idx ]=alpha_dot( alpha[(t-1)*Nr+idx] + dt*a_ij[s]*K3[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], dt, Nr);
@@ -549,7 +554,7 @@ for(int t=1;t<Nt;t++){
       PI[idx]         +=K10[idx];
       chi[idx]        +=K11[idx];
       phi[t*Nr + idx] +=K12[idx];
-    /*if (idx==Nr-1 && t%1==0){
+    if (idx==Nr-1 && t%1==0){
     printf("t : %d\n",t);
     printf("r : %d\n",idx);
 
@@ -569,7 +574,7 @@ for(int t=1;t<Nt;t++){
     printf("rho : %.15f\n",rho[idx]);
     printf("ja : %.15f\n",ja[idx]);
     printf("SA : %.15f\n",SA[idx]);
-    printf("SB : %.15f\n",SB[idx]);}*/}
+    printf("SB : %.15f\n",SB[idx]);}}
       
 }
 printf("Runge-Kutta: check\n");
