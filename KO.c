@@ -3,7 +3,7 @@
 #include<math.h>
 #include <time.h> 
 #include <string.h>
-#define order 11
+#define order 3
 double coefficient_adelantada[order];
 double coefficient_centrada[order];
 double coefficient_atrasada[order];
@@ -81,23 +81,23 @@ void difference_tenth(double *df, double *f, double h, int N){
     }
   }
 }
-double difference_tenth_RK( double *f,double *Kf, double *a_ij, int idx,int s, double h, int Nr){
+double difference_tenth_RK( double *f,double *Kf, double *a_ij, int idx,int s, double h,double dt, int Nr){
   double temp ;
   temp=0.0;
 
     if (idx<(int)(order-1)/2){
       for (int m=0;m<order;m++){
-        temp += coefficient_adelantada[m]*(f[idx+m] + a_ij[s]*Kf[(s)*Nr+idx]);
+        temp += coefficient_adelantada[m]*(f[idx+m] + dt*a_ij[s]*Kf[(s)*Nr+idx+m]);
       }
     }
     else if (idx > Nr-(int)(order-1)/2-1){
       for (int m=-order+1;m<1;m++){
-        temp += coefficient_atrasada[-m]*(f[idx+m] + a_ij[s]*Kf[(s)*Nr+idx+m]);
+        temp += coefficient_atrasada[-m]*(f[idx+m] + dt*a_ij[s]*Kf[(s)*Nr+idx+m]);
       }
     }
     else{
       for (int m=0;m<order;m++){
-        temp += coefficient_centrada[m]*(f[idx-(int)(order-1)/2+m] + a_ij[s]*Kf[(s)*Nr+idx-(int)(order-1)/2+m]);
+        temp += coefficient_centrada[m]*(f[idx-(int)(order-1)/2+m] + dt*a_ij[s]*Kf[(s)*Nr+idx-(int)(order-1)/2+m]);
       }
     }
     return temp/h;
@@ -106,7 +106,7 @@ double difference_tenth_RK( double *f,double *Kf, double *a_ij, int idx,int s, d
 double absorbente(double *g,int idx,double dr,double dt,int Nr){
     double dgdt, c;
     c=1.0;
-    dgdt=-1.0*c*(g[idx]-g[idx-1])/(2.0*dr);
+    dgdt=-1.0*dr/dt*(g[idx]-g[idx-1])/(2.0*dr);
 
     return g[idx] + dgdt*dt;
 }
@@ -132,7 +132,7 @@ double Kreiss_Oliger(double *G,int idx,int Nr,double epsilon){
 
 double Kb_dot( double Kb, double K, double A,double B, double alpha, double Db, double Da,
   double lambda, double U, double rho, double S_A,double dr_Db, double dr, int idx, int Nr, int t){
-    double epsilon=0.001;
+    double epsilon=0.1;
     double rs;
         double Mp=1.0/sqrt(8.0*3.1415);
 
@@ -150,14 +150,14 @@ double Kb_dot( double Kb, double K, double A,double B, double alpha, double Db, 
       func_2 = -0.5 * Da * Db - 0.5*dr_Db + 0.25*Db*(U + 4.0*lambda*B/A) +A*K*Kb;
       func_3 = S_A - rho;
 
-      func= alpha/(A * rs)*func_1 + alpha/A*func_2 + alpha/(2.0*Mp*Mp)*func_3;
+      func= alpha/(A * rs)*func_1 + alpha/A*func_2 + alpha/(2.0)*func_3;
       return func;
     }
  }
 
 double K_dot( double K, double Kb, double A,double B, double alpha, double Db, double Da,
   double lambda, double U, double rho, double S_A, double S_B, double dr_Da, double dr, int idx, int Nr, int t){
-    double epsilon=0.001;
+    double epsilon=0.1;
     double rs;
     double Mp=1.0/sqrt(8.0*3.1415);
     if (t==0){
@@ -181,7 +181,7 @@ double K_dot( double K, double Kb, double A,double B, double alpha, double Db, d
 
 double lambda_dot( double lambda, double Kb, double K,double A, double B, double alpha, double Db,
   double ja,double dr_Kb, double dr, int idx, int Nr, int t){
-  double epsilo=0.001;
+  double epsilo=0.1;
       double Mp=1.0/sqrt(8.0*3.1415);
 
   if(t==0){
@@ -240,7 +240,7 @@ double Db_dot(double *Kb, double *alpha,double *K_a,double *K_Kb,  double *a_ij,
   if (idx<(int)(order-1)/2){
     for (int m=0;m<order;m++){
       
-      temp += coefficient_adelantada[m]*f_Db(alpha,Kb,K_a,K_Kb,a_ij,dt,idx,s,Nr,t);
+      temp += coefficient_adelantada[m]*f_Db(alpha,Kb,K_a,K_Kb,a_ij,dt,idx+m,s,Nr,t);
     }
     
   }
@@ -261,7 +261,7 @@ double alpha_dot( double alpha,double K,  double dt, int Nr){
     return -2.0*alpha*K;
 }
 
-double Da_dot( double Da, double dr_K, double dt, int Nr,int t){
+double Da_dot(double dr_K, double dt, int Nr,int t){
       return -2.0*dr_K;
 }
 void calculate_rho(double *rho,double *PI,double *chi, double *A, double *B, int Nr){
@@ -320,7 +320,7 @@ double chi_evolution( double *chi, double *A, double *B, double *alpha, double *
   if (idx<(int)(order-1)/2){
     for (int m=0;m<order;m++){
       
-      temp += coefficient_adelantada[m]*f_chi(A,B,alpha,PI,K_A,K_a,K_B,K_PI,a_ij,dt,idx,s,Nr,t);
+      temp += coefficient_adelantada[m]*f_chi(A,B,alpha,PI,K_A,K_a,K_B,K_PI,a_ij,dt,idx+m,s,Nr,t);
     }
     
   }
@@ -356,7 +356,7 @@ double PI_evolution( double *PI, double *A, double *B, double *alpha, double *ch
   if (idx<(int)(order-1)/2){
     for (int m=0;m<order;m++){
       
-      temp += coefficient_adelantada[m]*f_PI(A,B,alpha,chi,K_A,K_a,K_B,K_chi,a_ij,idx,s,dt,dr,Nr,t);
+      temp += coefficient_adelantada[m]*f_PI(A,B,alpha,chi,K_A,K_a,K_B,K_chi,a_ij,idx+m,s,dt,dr,Nr,t);
     } 
       return temp/dr*(1.0/(idx*dr*idx*dr+epsilon));
 
@@ -377,8 +377,8 @@ double PI_evolution( double *PI, double *A, double *B, double *alpha, double *ch
   }
 }
 void inicial_phi(double *phi, double dr,int Nr){
-  double a=0.5;
-  double std=5.5;
+  double a=0.02;
+  double std=1.5;
   for (int i=0;i<Nr;i++){
     //phi[i]=a;
     phi[i]=a*(i*dr-20.0)/std*exp(-( (i*dr-20.0) /std)*((i*dr-20.0) /std));
@@ -397,8 +397,8 @@ void iniciar_A(double *A,double *chi, double dr,int Nr){
   double A0,rs,chi0;
   double epsilon=0.1;
   double Mp=1.0/sqrt(8.0*3.1415);
-    double a=0.5;
-  double std=5.5;
+    double a=0.02;
+  double std=1.5;
   A[0]=1.0;
   ks[0]=0.0;
 
@@ -450,8 +450,8 @@ void rellenar(double *f, int Nr,double num){
 }
 
 int main(){
-  int Nr=1000;
-  int Nt=80000;
+  int Nr=2000;
+  int Nt=30000;
   int minit= Nt/100;
   // Defino los array del host
   double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U, *Da, *Db, *temp_phi, *temp_Kb;
@@ -461,10 +461,10 @@ int main(){
 
   //deltas
   double dr=50.0/Nr;
-  double dt=dr/4000000.0;
+  double dt=dr/40.0;
   printf("dr=%f , dt=%f",dr,dt);
 // mallocs
-phi=(double *)malloc(Nr*minit*sizeof(double));
+phi=(double *)malloc(Nr*Nt*sizeof(double));
 temp_Kb=(double *)malloc(15000*Nr*sizeof(double));
 temp_phi=(double *)malloc(Nr*sizeof(double));
 
@@ -539,7 +539,7 @@ double *dr_A0;
 dr_A0=(double *)malloc(Nr*sizeof(double));
 difference_tenth(dr_A0,A,dr,Nr);
 for(int idx=0;idx<Nr;idx++){
-  lambda[idx]=lambda_dot( lambda[idx], Kb[idx] , K[idx], A[idx], B[idx], alpha[idx], Db[idx], ja[idx],0.0, dr, dt, Nr, 0);
+  lambda[idx]=lambda_dot( lambda[idx], Kb[idx] , K[idx], A[idx], B[idx], alpha[idx], Db[idx], ja[idx],0.0, dr, idx, Nr, 0);
   U[idx]=U_dot( U[idx], Kb[idx] , K[idx] , A[idx] , B[idx] ,  alpha[idx] , Db[idx] ,Da[idx],  lambda[idx] , ja[idx],0.0,dr_A0[idx], dr, dt, Nr, 0);
   //printf("r : %d\n",idx);
   //printf("U : %.15f\n",U[idx]);
@@ -588,7 +588,11 @@ float beta=1.0/100000;
 
 printf("Rho antes de la simulacion rho = %.15f\n",conservacion(rho,dr,Nr));
 
-for(int t=1;t< 15000 ;t++){
+
+
+
+    
+for(int t=1;t< Nt ;t++){
 
 
   rellenar(K10,(stage+1)*Nr,0.0);
@@ -617,7 +621,7 @@ for(int t=1;t< 15000 ;t++){
         K9[idx]=0.0;K10[idx]=0.0;K11[idx]=0.0;K12[idx]=0.0;
       }
 
-      dr_A= difference_tenth_RK(A, K9,a_ij, idx,s, dr,Nr);
+      dr_A= difference_tenth_RK(A, K9,a_ij, idx,s, dr,dt,Nr);
       //if(t%1==0 && idx==Nr-1){
       //printf("drK:%f",dr_K);}
 
@@ -631,21 +635,23 @@ for(int t=1;t< 15000 ;t++){
       K2[ (s+1)*Nr + idx ]=Db_dot(Kb , alpha,K3,K5,a_ij, dt,dr,idx,s, Nr, t);
 
       K3[ (s+1)*Nr + idx ]=alpha_dot( alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], dt, Nr);
-      dr_K= difference_tenth_RK(K, K6,a_ij, idx,s, dr,Nr); 
-      K4[ (s+1)*Nr + idx ]=Da_dot( Da[idx] + dt*a_ij[s]*K4[s*Nr +idx], dr_K, dt, Nr,t);
+      dr_K= difference_tenth_RK(K, K6,a_ij, idx,s, dr,dt,Nr); 
+
+      K4[ (s+1)*Nr + idx ]=Da_dot( dr_K, dt, Nr,t);
 
       
-      dr_Da=difference_tenth_RK( Da, K4,a_ij, idx,s, dr,Nr); 
+      dr_Da=difference_tenth_RK( Da, K4,a_ij, idx,s, dr,dt,Nr); 
       K6[ (s+1)*Nr + idx ]=K_dot( K[idx] + dt*a_ij[s]*K6[s*Nr +idx], Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], A[idx] + dt*a_ij[s]*K9[s*Nr +idx], B[idx] + dt*a_ij[s]*K1[s*Nr +idx], alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], Db[idx] + dt*a_ij[s]*K2[s*Nr +idx], Da[idx] + dt*a_ij[s]*K4[s*Nr +idx], lambda[idx] + dt*a_ij[s]*K7[s*Nr +idx], U[idx] + dt*a_ij[s]*K8[s*Nr +idx] , rho[idx], SA[idx], SB[idx],dr_Da, dr, idx, Nr, t);
       
-      dr_Db=difference_tenth_RK( Db, K2,a_ij, idx,s, dr,Nr); 
+      dr_Db=difference_tenth_RK( Db, K2,a_ij, idx,s, dr,dt,Nr); 
+      
       K5[ (s+1)*Nr + idx ]=Kb_dot( Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], A[idx] + dt*a_ij[s]*K9[s*Nr +idx], B[idx] + dt*a_ij[s]*K1[s*Nr +idx], alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], Db[idx] + dt*a_ij[s]*K2[s*Nr +idx], Da[idx] + dt*a_ij[s]*K4[s*Nr +idx], lambda[idx] + dt*a_ij[s]*K7[s*Nr +idx], U[idx] + dt*a_ij[s]*K8[s*Nr +idx],rho[idx], SA[idx],dr_Db, dr, idx, Nr, t);
       
 
 
-      dr_Kb=difference_tenth_RK(Kb, K5,a_ij, idx,s, dr,Nr);      
-      K7[ (s+1)*Nr + idx ]=lambda_dot( lambda[idx] + dt*a_ij[s]*K7[s*Nr +idx], Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], A[idx] + dt*a_ij[s]*K9[s*Nr +idx], B[idx] + dt*a_ij[s]*K1[s*Nr +idx], alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], Db[idx] + dt*a_ij[s]*K2[s*Nr +idx], ja[idx], dr_Kb, dr, dt, Nr, t);
-      dr_K= difference_tenth_RK(K, K6,a_ij, idx,s, dr,Nr); 
+      dr_Kb=difference_tenth_RK(Kb, K5,a_ij, idx,s, dr,dt,Nr);      
+      K7[ (s+1)*Nr + idx ]=lambda_dot( lambda[idx] + dt*a_ij[s]*K7[s*Nr +idx], Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], A[idx] + dt*a_ij[s]*K9[s*Nr +idx], B[idx] + dt*a_ij[s]*K1[s*Nr +idx], alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], Db[idx] + dt*a_ij[s]*K2[s*Nr +idx], ja[idx], dr_Kb, dr, idx, Nr, t);
+      dr_K= difference_tenth_RK(K, K6,a_ij, idx,s, dr,dt,Nr); 
       K8[ (s+1)*Nr + idx ]=U_dot( U[idx] + dt*a_ij[s]*K8[s*Nr +idx], Kb[idx] + dt*a_ij[s]*K5[s*Nr +idx], K[idx] + dt*a_ij[s]*K6[s*Nr +idx], A[idx] + dt*a_ij[s]*K9[s*Nr +idx], B[idx] + dt*a_ij[s]*K1[s*Nr +idx],  alpha[idx] + dt*a_ij[s]*K3[s*Nr +idx], Db[idx] + dt*a_ij[s]*K2[s*Nr +idx], Da[idx] + dt*a_ij[s]*K4[s*Nr +idx],  lambda[idx] + dt*a_ij[s]*K7[s*Nr +idx],  ja[idx],dr_K,0.0, dr, dt, Nr, t);
 
       K1[idx] += dt *( b_i[s] * K1[(s+1)*Nr+idx]);
@@ -671,8 +677,8 @@ for(int t=1;t< 15000 ;t++){
       Db[idx]         +=K2[idx];
       alpha[idx] +=K3[idx];
       Da[idx]         +=K4[idx];
-      Kb[idx]         +=0.0003*K5[idx];
-      K[idx]          +=0.0003*K6[idx];
+      Kb[idx]         +=K5[idx];
+      K[idx]          +=K6[idx];
       lambda[idx]     +=K7[idx];
       U[idx]          +=K8[idx];
       A[idx]          +=K9[idx];
@@ -680,15 +686,15 @@ for(int t=1;t< 15000 ;t++){
       PI[idx]         = PI[idx] + K10[idx];
       chi[idx]        = chi[idx] + K11[idx];
       temp_phi[idx]  += K12[idx];
-        //K[idx] =K[idx] + Kreiss_Oliger(K,idx,Nr,0.000005);
-        //Kb[idx] =Kb[idx] + Kreiss_Oliger(Kb,idx,Nr,0.000005);
-        //Db[idx] =Db[idx] + Kreiss_Oliger(Db,idx,Nr,0.000005);
-        //Da[idx] =Da[idx] + Kreiss_Oliger(Da,idx,Nr,0.000005);
-        //PI[idx] =PI[idx] + Kreiss_Oliger(PI,idx,Nr,0.005);
-        //chi[idx] =chi[idx] + Kreiss_Oliger(chi,idx,Nr,0.005);
+        //K[idx] =K[idx] + Kreiss_Oliger(K,idx,Nr,0.0005);
+        //>Kb[idx] =Kb[idx] + Kreiss_Oliger(Kb,idx,Nr,0.0005);
+        //Db[idx] =Db[idx] + Kreiss_Oliger(Db,idx,Nr,0.0005);
+        //a[idx] =Da[idx] + Kreiss_Oliger(Da,idx,Nr,0.0005);
+        //PI[idx] =PI[idx] + Kreiss_Oliger(PI,idx,Nr,0.0005);
+        //chi[idx] =chi[idx] + Kreiss_Oliger(chi,idx,Nr,0.0005);
 
-      K[idx]=K[idx]/sqrt(1+K[idx]*K[idx]);
-        Kb[idx]=Kb[idx]/sqrt(1+K[idx]*K[idx]);
+      //K[idx]=K[idx]/sqrt(1+K[idx]*K[idx]);
+        //Kb[idx]=Kb[idx]/sqrt(1+K[idx]*K[idx]);
 
         if (idx==0){
             A[idx]=B[idx];
@@ -709,23 +715,16 @@ for(int t=1;t< 15000 ;t++){
             K[1]=K[0];
             Kb[1]=K[0];
         }
-        if (idx==Nr-1){
-            Kb[idx]=absorbente(Kb,idx,dr,dt,Nr);
-            K[idx]=absorbente(K,idx,dr,dt,Nr);
-            PI[idx]=absorbente(PI,idx,dr,dt,Nr);
-            chi[idx]=absorbente(chi,idx,dr,dt,Nr);
 
-
-        }
-       if(t%1==0){
+       /*if(t%1==0){
         temp_Kb[(int)t*Nr+idx] = Kb[idx] + K5[idx];
-       } 
-      if(t%100==0){
-        phi[(int)t/100*Nr + idx] = temp_phi[idx] + K12[idx];
+       } */
+      if(t%1==0){
+        phi[(int)t*Nr + idx] = temp_phi[idx] + K12[idx];
 
       }
-    if (t==14648 && idx< 210){
-        printf("r : %.d\n",idx);
+/*
+        printf("r : %d\n",idx);
 
     printf("PI : %.15f\n",K10[Nr+idx]);
         printf("PI : %.15f\n",K10[2*Nr+idx]);
@@ -759,20 +758,48 @@ for(int t=1;t< 15000 ;t++){
     printf("alpha : %.15f\n",K3[3*Nr+idx]);
 
     printf("alpha : %.15f\n",K3[4*Nr+idx]);
+    printf("Kb : %.15f\n",K5[Nr+idx]);
+    printf("Kb : %.15f\n",K5[2*Nr+idx]);
+
+    printf("Kb : %.15f\n",K5[3*Nr+idx]);
+
+    printf("Kb : %.15f\n",K5[4*Nr+idx]);
     printf("K : %.15f\n",K6[Nr+idx]);
         printf("K : %.15f\n",K6[2*Nr+idx]);
 
     printf("K : %.15f\n",K6[3*Nr+idx]);
 
     printf("K : %.15f\n",K6[4*Nr+idx]);
+    printf("lambda : %.15f\n",K7[Nr+idx]);
+        printf("lambda : %.15f\n",K7[2*Nr+idx]);
 
-    }
-    if (idx==309 && t>14649-2 && t<14649+1){
+    printf("lambda : %.15f\n",K7[3*Nr+idx]);
+
+    printf("lambda : %.15f\n",K7[4*Nr+idx]);    
+    printf("U : %.15f\n",K8[Nr+idx]);
+        printf("U : %.15f\n",K8[2*Nr+idx]);
+
+    printf("U : %.15f\n",K8[3*Nr+idx]);
+
+    printf("U : %.15f\n",K8[4*Nr+idx]);
+        printf("Da : %.15f\n",K4[Nr+idx]);
+        printf("Da : %.15f\n",K4[2*Nr+idx]);
+
+    printf("Da : %.15f\n",K4[3*Nr+idx]);
+
+    printf("Da : %.15f\n",K4[4*Nr+idx]);
+        printf("Db : %.15f\n",K2[Nr+idx]);
+        printf("Db : %.15f\n",K2[2*Nr+idx]);
+
+    printf("DB : %.15f\n",K2[3*Nr+idx]);
+
+    printf("DB : %.15f\n",K2[4*Nr+idx]);*/
+    
+    if (idx==750 &&t%1000==0){
     printf("t : %d\n",t);
     printf("r : %d\n",idx);
 
-    printf("phi : %.15f\n",phi[(int)t/100*Nr+idx]);
-    printf("phi_past : %.15f\n",phi[(int)(t-100)/100*Nr+idx]);
+
 
     printf("PI : %.15f\n",PI[idx]);
     printf("chi : %.15f\n",chi[idx]);
@@ -804,7 +831,7 @@ for(int t=1;t< 15000 ;t++){
 printf("Runge-Kutta: check\n");
 
 
-guardar_salida_phi(phi,Nr,Nt/100);
+guardar_salida_phi(phi,Nr,Nt);
 
 guardar_salida_alpha(temp_Kb,Nr,15000);
 
