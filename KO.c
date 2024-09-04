@@ -106,7 +106,7 @@ double difference_tenth_RK( double *f,double *Kf, double *a_ij, int idx,int s, d
 double absorbente(double *g,int idx,double dr,double dt,int Nr){
     double dgdt, c;
     c=1.0;
-    dgdt=-1.0*dr/dt*(g[idx]-g[idx-1])/(2.0*dr);
+    dgdt=-1.0*c*(3.0*g[idx]-4.0*g[idx-1] + g[idx-2])/(2.0*dr);
 
     return g[idx] + dgdt*dt;
 }
@@ -132,7 +132,7 @@ double Kreiss_Oliger(double *G,int idx,int Nr,double epsilon){
 
 double Kb_dot( double Kb, double K, double A,double B, double alpha, double Db, double Da,
   double lambda, double U, double rho, double S_A,double dr_Db, double dr, int idx, int Nr, int t){
-    double epsilon=0.1;
+    double epsilon=dr*0.5;
     double rs;
         double Mp=1.0/sqrt(8.0*3.1415);
 
@@ -150,14 +150,14 @@ double Kb_dot( double Kb, double K, double A,double B, double alpha, double Db, 
       func_2 = -0.5 * Da * Db - 0.5*dr_Db + 0.25*Db*(U + 4.0*lambda*B/A) +A*K*Kb;
       func_3 = S_A - rho;
 
-      func= alpha/(A * rs)*func_1 + alpha/A*func_2 + alpha/(2.0)*func_3;
+      func= alpha/(A * rs)*func_1 + alpha/A*func_2 + alpha/(2.0*Mp*Mp)*func_3;
       return func;
     }
  }
 
 double K_dot( double K, double Kb, double A,double B, double alpha, double Db, double Da,
   double lambda, double U, double rho, double S_A, double S_B, double dr_Da, double dr, int idx, int Nr, int t){
-    double epsilon=0.1;
+    double epsilon=dr*0.5;
     double rs;
     double Mp=1.0/sqrt(8.0*3.1415);
     if (t==0){
@@ -174,26 +174,35 @@ double K_dot( double K, double Kb, double A,double B, double alpha, double Db, d
       func_2 = Da*Da + dr_Da + 2.0*Da/rs - 0.5*Da*(U + 4.0*lambda*B/A);
       func_3 = rho + S_A + 2.0*S_B;
 
-      func= alpha*func_1 - alpha/A*func_2 + alpha/(2.0)*func_3;
+      func= alpha*func_1 - alpha/A*func_2 + alpha/(2.0*Mp*Mp)*func_3;
       return func;
     }
 }
 
 double lambda_dot( double lambda, double Kb, double K,double A, double B, double alpha, double Db,
   double ja,double dr_Kb, double dr, int idx, int Nr, int t){
-  double epsilo=0.1;
+  double epsilo=dr*0.5;
       double Mp=1.0/sqrt(8.0*3.1415);
-
+    double rs;
   if(t==0){
-    return (1.0-A/B)/(idx*dr+epsilo);
+      if (idx==0){
+      rs=idx*dr+epsilo;}
+      else{
+      rs=idx*dr;
+      }
+    return (1.0-A/B)/(rs);
   }
   else{
     double func;
+      if (idx==0){
+      rs=idx*dr+epsilo;}
+      else{
+      rs=idx*dr;
+      }
 
+    func= 2.0*alpha*A/B*(dr_Kb - 0.5*Db*( K - 3.0*Kb ) + 0.5*ja/(Mp*Mp));
 
-    func= 2.0*alpha*A/B*(dr_Kb - 0.5*Db*( K - 3.0*Kb ) + 0.5*ja);
-
-
+    //func= 2.0*alpha*A/B*(( K - 3.0*Kb )/rs );   
     return func;  
     }
   }
@@ -209,7 +218,7 @@ double U_dot( double U, double Kb, double K,double A, double B, double alpha, do
     double func,func_1,func_2,func_3;
     func_1 = dr_K + Da*(K - 4.0*Kb);
     func_2 = 2.0*(K -3.0*Kb)*(Db - 2.0*lambda*B/A);
-    func_3 = 4.0*alpha*ja;
+    func_3 = 4.0*alpha*ja/(Mp*Mp);
 
     func= -2.0*alpha * (func_1 - func_2) - func_3;
     return func; 
@@ -292,12 +301,12 @@ double conservacion(double *rho, double dr, int Nr){
     sum_impar=0.0;
 
     for(int i=2; i<Nr-1; i=2+i){
-        sum_par+=rho[i];
+        sum_par+=rho[i]*i*i*dr*dr;
     }
     for(int i=1; i<Nr-1; i=2+i){
-        sum_impar+=rho[i];
+        sum_impar+=rho[i]*i*i*dr*dr;
     }
-    return (rho[0] +4.0*sum_impar + 2.0*sum_par +  rho[Nr-1])*(dr/3.0);
+    return (rho[0]*0.0 +4.0*sum_impar + 2.0*sum_par +  rho[Nr-1]*(Nr-1)*(Nr-1)*dr*dr)*(4.0*3.1415*dr/3.0);
             
 
 
@@ -340,9 +349,12 @@ double chi_evolution( double *chi, double *A, double *B, double *alpha, double *
 double f_PI(double *A, double *B, double *alpha, double *chi,double *K_A,
     double *K_a,double *K_B,double *K_chi, double *a_ij, int idx, int s, double dt,double dr,int Nr,int t){
     double r2;
-    double epsilon=0.01;
-
-     r2=idx*dr*idx*dr; 
+    double epsilon=dr*0.5;
+    if(idx==0){
+     r2=epsilon; }
+     else{
+      r2=idx*dr*idx*dr;
+     }
 
     return  (alpha[idx]+dt*a_ij[s]*K_a[(s)*Nr + idx])*(B[idx]+dt*a_ij[s]*K_B[(s)*Nr + idx])*(chi[idx]+dt*a_ij[s]*K_chi[(s)*Nr + idx])*r2
             /(sqrt(A[idx]+dt*a_ij[s]*K_A[(s)*Nr + idx]));
@@ -350,7 +362,7 @@ double f_PI(double *A, double *B, double *alpha, double *chi,double *K_A,
 double PI_evolution( double *PI, double *A, double *B, double *alpha, double *chi,double *K_A,
   double *K_a,double *K_B,double *K_chi, double *a_ij, int idx, int s, double dt, double dr, int Nr,int t){
   double temp;
-  double epsilon=0.01;
+  double epsilon=dr*0.5;
 
   temp=0.0;
   if (idx<(int)(order-1)/2){
@@ -377,7 +389,7 @@ double PI_evolution( double *PI, double *A, double *B, double *alpha, double *ch
   }
 }
 void inicial_phi(double *phi, double dr,int Nr){
-  double a=0.02;
+  double a=0.0002;
   double std=1.5;
   for (int i=0;i<Nr;i++){
     //phi[i]=a;
@@ -395,9 +407,9 @@ void iniciar_A(double *A,double *chi, double dr,int Nr){
   ks=(double *)malloc(sizeof(double)*5);
   double sumas=0.0;
   double A0,rs,chi0;
-  double epsilon=0.1;
+  double epsilon=dr*0.5;
   double Mp=1.0/sqrt(8.0*3.1415);
-    double a=0.02;
+    double a=0.0002;
   double std=1.5;
   A[0]=1.0;
   ks[0]=0.0;
@@ -422,12 +434,20 @@ void iniciar_A(double *A,double *chi, double dr,int Nr){
               } 
 
             }
+            else if (idx > Nr-(int)(order-1)/2-1){
+              for (int m=-order+1;m<1;m++){
+              rs= dr*((idx-1)+m)+dr*c_i[s];
+
+              temp +=  coefficient_atrasada[-m]*dfr(rs,a,std);
+              }
+            }
             else{
             for (int m=0;m<order;m++){
               rs= dr*((idx-1)-(int)(order-1)/2+m)+dr*c_i[s];
 
               temp += coefficient_centrada[m]*dfr(rs,a,std);
             }
+            
           }
         if (idx-1==0){
         rs= dr*(idx-1)+dr*c_i[s] + epsilon;
@@ -451,7 +471,7 @@ void rellenar(double *f, int Nr,double num){
 
 int main(){
   int Nr=2000;
-  int Nt=30000;
+  int Nt=100000;
   int minit= Nt/100;
   // Defino los array del host
   double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U, *Da, *Db, *temp_phi, *temp_Kb;
@@ -461,7 +481,8 @@ int main(){
 
   //deltas
   double dr=50.0/Nr;
-  double dt=dr/40.0;
+  //double dt=5.0/20000;
+  double dt=5.0/40000;
   printf("dr=%f , dt=%f",dr,dt);
 // mallocs
 phi=(double *)malloc(Nr*Nt*sizeof(double));
@@ -590,7 +611,6 @@ printf("Rho antes de la simulacion rho = %.15f\n",conservacion(rho,dr,Nr));
 
 
 
-
     
 for(int t=1;t< Nt ;t++){
 
@@ -675,7 +695,7 @@ for(int t=1;t< Nt ;t++){
     for(int idx=0;idx<Nr;idx++){ 
       B[idx]          +=K1[idx];
       Db[idx]         +=K2[idx];
-      alpha[idx] +=K3[idx];
+      alpha[idx]      +=K3[idx];
       Da[idx]         +=K4[idx];
       Kb[idx]         +=K5[idx];
       K[idx]          +=K6[idx];
@@ -686,44 +706,58 @@ for(int t=1;t< Nt ;t++){
       PI[idx]         = PI[idx] + K10[idx];
       chi[idx]        = chi[idx] + K11[idx];
       temp_phi[idx]  += K12[idx];
-        //K[idx] =K[idx] + Kreiss_Oliger(K,idx,Nr,0.0005);
-        //>Kb[idx] =Kb[idx] + Kreiss_Oliger(Kb,idx,Nr,0.0005);
-        //Db[idx] =Db[idx] + Kreiss_Oliger(Db,idx,Nr,0.0005);
-        //a[idx] =Da[idx] + Kreiss_Oliger(Da,idx,Nr,0.0005);
-        //PI[idx] =PI[idx] + Kreiss_Oliger(PI,idx,Nr,0.0005);
-        //chi[idx] =chi[idx] + Kreiss_Oliger(chi,idx,Nr,0.0005);
+
+      //reinicio los K CEROS
+
+        K1[idx]=0.0;K2[idx]=0.0;K3[idx]=0.0;K4[idx]=0.0;
+        K5[idx]=0.0;K6[idx]=0.0;K7[idx]=0.0;K8[idx]=0.0;
+        K9[idx]=0.0;K10[idx]=0.0;K11[idx]=0.0;K12[idx]=0.0;
+        //K[idx] =K[idx] + Kreiss_Oliger(K,idx,Nr,0.05);
+        //Kb[idx] =Kb[idx] + Kreiss_Oliger(Kb,idx,Nr,0.05);
+        //Db[idx] =Db[idx] + Kreiss_Oliger(Db,idx,Nr,0.05);
+        //Da[idx] =Da[idx] + Kreiss_Oliger(Da,idx,Nr,0.05);
+        //PI[idx] =PI[idx] + Kreiss_Oliger(PI,idx,Nr,0.05);
+        //chi[idx] =chi[idx] + Kreiss_Oliger(chi,idx,Nr,0.05);
 
       //K[idx]=K[idx]/sqrt(1+K[idx]*K[idx]);
         //Kb[idx]=Kb[idx]/sqrt(1+K[idx]*K[idx]);
 
-        if (idx==0){
-            A[idx]=B[idx];
-            Kb[idx]=K[idx]/3.0;
+        if (idx==1){
+            //A[idx-1]=B[idx-1];
+            //Kb[idx-1]=K[idx-1]/3.0;
+            temp_phi[0]=temp_phi[1];
+            alpha[0]=alpha[1];
+            PI[0]=PI[1];
+            A[0]=A[1];
+            B[0]=B[1];
+            K[0]=K[1];
+            Kb[0]=Kb[1];
 
             //antisimetricas
-            chi[idx]=0.0;
-            Da[idx]=0.0;
-            Db[idx]=0.0;
-            U[idx]=0.0;
-            lambda[idx]=0.0;
+            chi[0]=0.0;
+            Da[0]=0.0;
+            Db[0]=0.0;
+            U[0]=0.0;
+            lambda[0]=0.0;
             //simetricas
-            temp_phi[idx]=temp_phi[idx+1];
-            alpha[0]=alpha[1];
-            PI[idx]=PI[1];
-            A[1]=A[0];
-            B[1]=B[0];
-            K[1]=K[0];
-            Kb[1]=K[0];
+
         }
 
        /*if(t%1==0){
         temp_Kb[(int)t*Nr+idx] = Kb[idx] + K5[idx];
-       } */
+       } */ 
       if(t%1==0){
-        phi[(int)t*Nr + idx] = temp_phi[idx] + K12[idx];
+        phi[(int)t*Nr + idx] = temp_phi[idx] ;
 
       }
-/*
+      if (idx==Nr-1){
+        Kb[idx]=absorbente(Kb,idx,dr,dt,Nr);
+        K[idx]=absorbente(K,idx,dr,dt,Nr);
+        PI[idx]=absorbente(PI,idx,dr,dt,Nr);
+        chi[idx]=absorbente(chi,idx,dr,dt,Nr);
+
+        }
+    /*if (idx==0 &&t<23000 &&t>19000){
         printf("r : %d\n",idx);
 
     printf("PI : %.15f\n",K10[Nr+idx]);
@@ -793,13 +827,14 @@ for(int t=1;t< Nt ;t++){
 
     printf("DB : %.15f\n",K2[3*Nr+idx]);
 
-    printf("DB : %.15f\n",K2[4*Nr+idx]);*/
+    printf("DB : %.15f\n",K2[4*Nr+idx]);}*/
     
-    if (idx==750 &&t%1000==0){
+    if (idx==0 &&t%1000==0){
     printf("t : %d\n",t);
     printf("r : %d\n",idx);
 
 
+    printf("PI : %.15f\n",phi[t*Nr + idx]);
 
     printf("PI : %.15f\n",PI[idx]);
     printf("chi : %.15f\n",chi[idx]);
