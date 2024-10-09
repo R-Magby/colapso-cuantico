@@ -8,9 +8,13 @@
 #define order 3
 #define consta_pi 3.1415
 #define consta_var 12
-double host_coefficient_adelantada[order];
-double host_coefficient_centrada[order];
-double host_coefficient_atrasada[order];
+
+
+//coeficientes de las diferencias finitas y RK4 para el host y el device
+
+double host_coefficient_adelantada[3] =  {-1.5 ,2.0 ,-0.5};
+double host_coefficient_centrada[3]  = {-0.5, 0.0, 0.5};
+double host_coefficient_atrasada[3] = {1.5, -2.0, 0.5};
 double  host_b_i[4] = {1.0/6.0 , 1.0/3.0 , 1.0/3.0 , 1.0/6.0};
 double host_c_i[4] = {0.0 , 0.5 , 0.5 , 1.0};
 double host_a_ij[4] = {0.0 , 0.5 , 0.5 , 1.0};
@@ -22,6 +26,8 @@ __device__ double b_i[4] = {1.0/6.0 , 1.0/3.0 , 1.0/3.0 , 1.0/6.0};
 __device__ double c_i[4] = {0.0 , 0.5 , 0.5 , 1.0};
 __device__ double a_ij[4] = {0.0 , 0.5 , 0.5 , 1.0};
 
+
+//guardado de diferentes salidas.
 void guardar_salida_phi(double *data,int Nr, int T) {
   FILE *fp = fopen("campo_escalar_2.dat", "wb");
   fwrite(data, sizeof(double), Nr*T, fp);
@@ -40,6 +46,7 @@ void guardar_salida_chi(double *data,int Nr, int T) {
   fwrite(data, sizeof(double), Nr*T, fp);
   fclose(fp);
 }
+/*
 void cargar_coeff_centradas_df(double *data, int N){
 
   FILE *arch;
@@ -70,8 +77,10 @@ void cargar_coeff_adelantada_df(double *data, int N){
   fclose(arch);
 
 }
+*/
 
-void difference_tenth(double *df, double *f, double h, int N ){
+//derivada array
+void derivate(double *df, double *f, double h, int N ){
   double temp;
 
   for(int idx=0; idx<N;idx++){
@@ -98,7 +107,7 @@ void difference_tenth(double *df, double *f, double h, int N ){
   }
 }
 
-
+//Absorbente
 double absorbente(double *g,int idx,double dr,double dt,int Nr){
     double dgdt, c;
     c=1.0;
@@ -107,6 +116,7 @@ double absorbente(double *g,int idx,double dr,double dt,int Nr){
     return g[idx] + dgdt*dt;
 }
 
+//Kreiss_Oliger
 double Kreiss_Oliger(double *G,int idx,int Nr,double epsilon){
 
     if(idx==0){
@@ -129,7 +139,7 @@ double Kreiss_Oliger(double *G,int idx,int Nr,double epsilon){
 
 
 
-
+//Stress_Energy clasicc
 void calculate_rho(double *rho,double *PI,double *chi, double *A, double *B, int Nr){
   for(int idx=0;idx<Nr;idx++){
     rho[idx] = (PI[idx]*PI[idx] / (B[idx]*B[idx]) + chi[idx]*chi[idx])/(2.0*A[idx]);}
@@ -152,6 +162,7 @@ void calculate_SB(double *SB, double *PI, double *chi, double *A, double *B, int
   SB[idx] = (PI[idx]*PI[idx] / (B[idx]*B[idx]) - chi[idx]*chi[idx])/(2.0*A[idx]);}
 
 }
+//conservacion de rho, para verificar que no cambie en el espacio
 double conservacion(double *rho, double dr, int Nr){
     float kn,sum_par,sum_impar;
     sum_par=0.0;
@@ -170,6 +181,7 @@ double conservacion(double *rho, double dr, int Nr){
 
 }
 
+//Derivada considerando el runge_Kutta, la variable symetric se ocupa para paara considerar si la funcion es par (derivada = 0) o impar (funcion = 0)
 __device__ double derivate_RK( double *f,double *Kf, int idx,int s, int id_RK, double dr,double dt, int Nr, int symmetric){
   double temp ;
   temp=0.0;
@@ -200,6 +212,8 @@ __device__ double derivate_RK( double *f,double *Kf, int idx,int s, int id_RK, d
     }
     return temp/dr;
 }
+//Derivada compleja considerando el runge_Kutta
+
 __device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDoubleComplex *Kf, int idx,int s, int id_RK, double dr,double dt, int Nr, int symmetric){
   cufftDoubleComplex temp ;
   temp.x = 0.0;
@@ -243,6 +257,7 @@ __device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDo
 
     return temp;
 }
+//Derivada compleja
 __device__ cufftDoubleComplex derivate_complex( cufftDoubleComplex *f, int idx,  double dr, int Nr, int symmetric){
   cufftDoubleComplex temp ;
   temp.x = 0.0;
@@ -260,11 +275,7 @@ __device__ cufftDoubleComplex derivate_complex( cufftDoubleComplex *f, int idx, 
         }
       }
     }
-    /*else if (idx<(int)(order-1)/2 && idx>0){
-      for (int m=0;m<order;m++){
-        temp += coefficient_adelantada[m]*(f[idx+m] + dt*a_ij[s]*Kf[(s)*Nr+idx+m]);
-      }
-    }*/
+
     else if (idx > Nr-(int)(order-1)/2-1){
       for (int m=-order+1;m<1;m++){
         temp.x += coefficient_atrasada[-m]*(f[idx+m].x );
@@ -290,6 +301,7 @@ __device__ cufftDoubleComplex derivate_complex( cufftDoubleComplex *f, int idx, 
     return temp;
 }
 
+//Metric fields...
 __device__ double Kb_dot(double *A, double *B, double *alpha, double *Da, double *Db, double * K, double *Kb, double *lambda,
                          double *U,  double *RK_C , double *Sa, double *rho, double radio, int id, int s, double dt, double dr, int Nr, int t, int error){
   double f1,f2,f3;
@@ -377,6 +389,7 @@ __device__ double U_dot(double *A, double *B, double *alpha, double *Da, double 
 
 }
 
+//Funciones para derivada temporal de Db (Db_dot es la derivada que llama la funcion f_Db y f_Db_dot es la funcion alpha * K)
 __device__ double f_Db_dot(double *Kb, double *alpha,  double *RK_C, int id, int s, double dt,int Nr,  int t, int error){
 
 
@@ -422,6 +435,10 @@ __device__ double Db_dot(double *Kb, double *alpha, int idx, int s, double dr, d
 
     return temp/dr;
 }
+
+//Matter fields
+
+//Funciones para derivada temporal de PI
 __device__ double f_PI_dot(double *chi, double *PI, double *A, double *B,double *alpha, double *RK_C, int id, int s, double dt,double dr,  int Nr,  int t, int error){
       double radio;
       double epsilon=dr/2.0;
@@ -441,7 +458,6 @@ __device__ double f_PI_dot(double *chi, double *PI, double *A, double *B,double 
   return (chi[id] + dt * a_ij[s] * RK_C[ 1*Nr + id ]) * (alpha[id] + dt * a_ij[s] * RK_C[ 5*Nr + id ]) *( B[id] + dt * a_ij[s] * RK_C[ 4*Nr + id ])*
           radio*radio/(sqrt(A[id] + dt * a_ij[s] * RK_C[ 3*Nr + id ]));
 }
-
 __device__ double PI_dot(double *chi, double *PI, double *A, double *B,double *alpha, double r2, int idx, int s, double dr, double dt, double *RK_C, int symmetric,int Nr,  int t, int error){
   double temp;
   temp=0.0;
@@ -475,7 +491,7 @@ __device__ double PI_dot(double *chi, double *PI, double *A, double *B,double *a
     return temp/dr*(1.0/(r2));;
 }
 
-
+//Funciones para derivada temporal de chi
 __device__ double f_chi_dot(double *PI, double *A, double *B,double *alpha, double *RK_C, int id, int s, double dt, int Nr,  int t, int error){
 
 
@@ -487,7 +503,6 @@ __device__ double f_chi_dot(double *PI, double *A, double *B,double *alpha, doub
   return (PI[id] + dt * a_ij[s] * RK_C[ 2*Nr + id ]) * (alpha[id] + dt * a_ij[s] * RK_C[ 5*Nr + id ])/
           (sqrt(A[id] + dt * a_ij[s] * RK_C[ 3*Nr + id ])*( B[id] + dt * a_ij[s] * RK_C[ 4*Nr + id ]));
 }
-
 __device__ double chi_dot(double *PI, double *A, double *B,double *alpha,int idx, int s, double dr, double dt, double *RK_C, int symmetric,int Nr, int t, int error){
   double temp;
   temp=0.0;
@@ -523,6 +538,10 @@ __device__ double chi_dot(double *PI, double *A, double *B,double *alpha,int idx
     return temp/dr;
 }
 
+//Cuantico
+
+
+//Funciones para derivada temporal de dr_u (derivada espacial de los nodos u)
 __device__ cufftDoubleComplex f_dr_u_dot(cufftDoubleComplex *pi, double *A, double *B,double *alpha, double *RK_C, cufftDoubleComplex *RK_Q, int id_nodo, int idr , int space, int s, double dt ,int Nr, int t, int error){
 
   cufftDoubleComplex Z;
@@ -538,7 +557,6 @@ __device__ cufftDoubleComplex f_dr_u_dot(cufftDoubleComplex *pi, double *A, doub
 
   return Z;
 }
-
 __device__ cufftDoubleComplex dr_u_dot(cufftDoubleComplex *pi, double *A, double *B,double *alpha,int id_nodo, int idr,int space, int s, double dr, double dt, double *RK_C, cufftDoubleComplex *RK_Q, 
                                       int symmetric,int Nr,  int t, int error){
   cufftDoubleComplex temp;
@@ -579,6 +597,10 @@ __device__ cufftDoubleComplex dr_u_dot(cufftDoubleComplex *pi, double *A, double
   
     return temp;
 }
+
+
+//Funciones para derivada temporal de pi (derivada temporal de los nodos u)
+
 __device__ double f_metric_dot(double *A, double *B,double *alpha, double *RK_C, int idr , int s, double dt, int Nr,  int t,int error){
 
   return  (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ]));
@@ -646,6 +668,8 @@ __device__ cufftDoubleComplex f_pi_dot(cufftDoubleComplex *u, cufftDoubleComplex
 
   return  Z;
 }
+
+//Evolucion...
 //( phi , chi , PI, A, B, alpha, Da, Db, K, Kb, lambda, U, u_nodos, pi, dr_u, Nr, Nk, Nl, dr, k_min, dt, t);
 __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, double *B, double *alpha, double *Da, double *Db, 
                               double * K, double *Kb, double *lambda, double *U, cufftDoubleComplex *u, cufftDoubleComplex *u_p1,  cufftDoubleComplex *pi, cufftDoubleComplex *dr_u,
@@ -656,27 +680,22 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
     double radio;
     float epsilon = dr/2;
     
+    // K de Runge kutta temporal
     double RK_temp[12];
     double RK_sum[12];
 
     cufftDoubleComplex RK_temp_Q[3];
     cufftDoubleComplex RK_sum_Q[3];
 
-    for( int i=0 ; i<12 ; i++){
-        RK_temp[i]=0.0;
-    }
-    for( int i=0 ; i<3 ; i++){
 
-        RK_temp_Q[i].x=0.0;
-
-        RK_temp_Q[i].y=0.0;
-    }
+    //inicializar los K de la grilla, RK_Clasico tiene dimensiones 12*Nr , 12 variables y Nr numero de puntos de la grilla
     if(idx <Nr && t==0){
       for( int i=0 ; i<12 ; i++){
         RK_C[ i*Nr + idx ] = 0.0;
       }
     }
     
+    //Dimensiones de RK cuantico es 3*Nk*Nl*Nr, 3 variables, Nk numero de nodos k (radial) , Nl numero de nodos l (angulares) y Nr
     if (idx<Nk*Nr*Nl && t==0){
       for( int i=0 ; i<3 ; i++){
         RK_Q[ i*Nr*Nk*Nl + idx ].x = 0.0;
@@ -684,7 +703,8 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
 
       }
     }
-
+  
+    //interacion de Runge kutta
     for (int s=0; s<4; s++){
       __syncthreads();
 
@@ -699,9 +719,8 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
         }
        //phi
         RK_temp[0] = (PI[idx] + dt * a_ij[s] * RK_C[ 2*Nr + idx ]) * (alpha[idx] + dt * a_ij[s] * RK_C[ 5*Nr + idx ])/(sqrt(A[idx] + dt * a_ij[s] * RK_C[ 3*Nr + idx ])*( B[idx] + dt * a_ij[s] * RK_C[ 4*Nr + idx ]));
+        
         //chi
-
-
         RK_temp[1] = chi_dot( PI, A, B, alpha, idx, s, dr, dt, RK_C, 1,Nr, t , error);
         //PI
         RK_temp[2] =  PI_dot( chi, PI, A, B, alpha, radio*radio , idx, s, dr, dt, RK_C, 1, Nr, t , error);
@@ -732,6 +751,7 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
         //printf("id = %d, A=%lf  \n", idx ,A[idx]);
           //}
 
+        //Sumar los K de RK y actualizar RK:C y RK_Q (talvez sea mejor solamente añadir RK_C y RK_Q con 4 dimensiones extra para lso k1 k2 k3 k4 y sumar todo al final).
         for( int i=0 ; i<12 ; i++){
           if(s==0){
             RK_sum[i]=b_i[s]*RK_temp[i];
@@ -778,7 +798,8 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
           RK_temp_Q[1].x =  temp_Q.x;
           RK_temp_Q[1].y =  temp_Q.y;
 
-          //pi
+
+          // indices de los nodos
           int k,l;
           k = id_nodo%Nk;
           l = id_nodo/Nl;
@@ -787,6 +808,8 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
             printf("id_nodo = %d , k = %d , l = %d \n",id_nodo,k,l);
           }
             */
+          
+            //pi
           temp_Q = f_pi_dot( u ,dr_u , A, B, alpha, lambda ,  RK_C, RK_Q, radio,  idx, idr, Nk*Nr*Nl,s, k, l, dt, dr, Nr, t , error);
           RK_temp_Q[2].x =  temp_Q.x;
           RK_temp_Q[2].y =  temp_Q.y;
@@ -795,6 +818,7 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
               
           }*/
 
+          //suma y actualizacion de los RK
           for( int i=0 ; i<3 ; i++){
             if(s==0){
               RK_sum_Q[i].x = b_i[s]*RK_temp_Q[i].x;
@@ -822,7 +846,7 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
       }
       __syncthreads();
 
-    
+    //evolucion
     }
     if(idx < Nr){
       phi[(t+1)*Nr +idx] = phi[t*Nr +idx] + dt*RK_sum[0];
@@ -840,6 +864,7 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
     }
     __syncthreads();
 
+    //u_p1 es la evolucion de u, es necesario ya que luego tengo que tener la derivada temporal (presicion 1)
     if( idx < Nr*Nk*Nl ){
       u_p1[idx].x    = u[idx].x +  dt*RK_sum_Q[0].x;
       u_p1[idx].y    = u[idx].y +  dt*RK_sum_Q[0].y;
@@ -852,6 +877,7 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
 
     }
 
+    //codiciones de borde 
     __syncthreads();
     if (idx==2){
       //A[idx-1]=B[idx-1];
@@ -910,6 +936,9 @@ __global__ void evolucion_var(double *phi, double *chi, double *PI, double *A, d
   }
 }
 
+// Fluctuaciones se divie en 2 funciones, fluctuacion esta dentro de un ciclo for de los l  por lo que dentro de fluctuacion() para un l voy a integrar todo los k
+//una cantidad de Nl veces(ciclo ford), esto porque la integral tiene dentro una sumatoria de los nodos l, por lo que, son Nl integrales. 
+
 __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cufftDoubleComplex *pi, double *temp_array ,  double *temp_fluct,   double dr, double dk, double dt, int Nr, int Nk , int Nl, int l, int t ){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   double radio;
@@ -919,6 +948,7 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
   double u_snake;
   double d_u_temp_x;
   double d_u_temp_y;
+  //radio
   if (idx < Nr){
     if(idx==0){
       radio=dr/2.0;
@@ -929,20 +959,20 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
 
     double suma_par = 0.0 , suma_impar = 0.0 ;
 
+    //array que guarda la integral de todos los k  en un r de un solo l
     temp_fluct[ 0*Nr + idx] = 0.0;
 
-    for (int k=0 ; k < Nk ; k++){
-      /*if(t==0){
-        d_u_temp_x =pi[  l*Nk*Nr + k*Nr + idx ].x;
-        d_u_temp_y =pi[  l*Nk*Nr + k*Nr + idx ].y;
 
-      }*/
+    //fluctuacion tiempos tiempo
+    for (int k=0 ; k < Nk ; k++){
+
+      //derivada temporal
       d_u_temp_x = ( u_p1[  l*Nk*Nr + k*Nr + idx].x * pow(radio , l) - u[l*Nk*Nr + k*Nr + idx].x * pow(radio , l) )/dt ;
       d_u_temp_y = ( u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) - u[l*Nk*Nr + k*Nr + idx].y * pow(radio , l) )/dt ;
       if(idx==50 && l==17){
         printf("d_u_temp_x = %.15f  |  k = %d\n",d_u_temp_x,k);
-          printf("u = %.15lf * radio = %f|\n",u[l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
-          printf("u_p1 = %.15f * radio = %f|\n", u_p1[  l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
+          printf("u = %.15lf * radio = %f, k = %d|\n",u[l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
+          printf("u_p1 = %.15f * radio = %f, k = %d|\n", u_p1[  l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
 
         
       }
@@ -960,17 +990,22 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
       }
 
     }
+    //integral (simpson 1/3)
     temp_fluct[ 0*Nr + idx] += suma_impar + suma_par ;
     temp_fluct[ 0*Nr + idx] = temp_fluct[ 0*Nr + idx] * (2.0*l + 1.0) * cte * dk/3.0;
     if(idx==50){
       printf("temp_fluct_0 = %1.5f |  l = %d\n",temp_fluct[ 0*Nr + idx],l);
     }
 
+
+    //reiniciar 
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
     cufftDoubleComplex res;
 
+    //fluctuacion r r
     for (int k=0 ; k < Nk ; k++){
+      //derivada radial compleja
       res = derivate_complex(u_p1,  l*Nk*Nr + k*Nr + idx, dr,Nr,0 );
       d_u_temp_x = res.x;
       d_u_temp_y = res.y ;
@@ -999,7 +1034,10 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
 
+
+        //fluctuacion tiempos radial
     for (int k=0 ; k < Nk ; k++){
+      //derivada temporal y radial compleja
       res = derivate_complex(u_p1, l*Nk*Nr + k*Nr + idx, dr,Nr,0 );
       d_u_temp_x = res.x * ( u_p1[  l*Nk*Nr + k*Nr + idx].x * pow(radio , l) - u[l*Nk*Nr + k*Nr + idx].x * pow(radio , l) )/dt ; 
       d_u_temp_y = res.y * ( u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) - u[l*Nk*Nr + k*Nr + idx].y * pow(radio , l) )/dt ;
@@ -1028,6 +1066,7 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
 
+        //fluctuacion theta theta
     for (int k=0 ; k < Nk ; k++){
       u_snake = u_p1[ l*Nk*Nr + k*Nr + idx].x * pow(radio , l) *u_p1[  l*Nk*Nr + k*Nr + idx].x * pow(radio , l) 
                 + u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) * u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) ;
@@ -1055,6 +1094,8 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     double angle;
     angle = acos( idx*(Nr-1)/(idx*dr) );
 
+
+        //fluctuacion phi phi (no se ocupa) es igual a fluctuacion de theta * sin(theta)^2
     for (int k=0 ; k < Nk ; k++){
       u_snake = u_p1[  l*Nk*Nr + k*Nr + idx].x * pow(radio , l) *u_p1[  l*Nk*Nr + k*Nr + idx].x * pow(radio , l) 
                 + u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) * u_p1[  l*Nk*Nr + k*Nr + idx].y * pow(radio , l) ;
@@ -1077,6 +1118,8 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     temp_fluct[ 4*Nr + idx] = temp_fluct[ 4*Nr + idx] * cte * (l +1)*(2*l +1) *sin(angle)*sin(angle)* dk/3.0; 
 
 
+
+    //guardar las fluctuacions en un array Nl*Nr*5, (5 fluctuaciones )
     temp_array[ 0*Nl*Nr + l*Nr + idx ]=temp_fluct[ 0*Nr + idx];
     temp_array[ 1*Nl*Nr + l*Nr + idx ]=temp_fluct[ 1*Nr + idx];
     temp_array[ 2*Nl*Nr + l*Nr + idx ]=temp_fluct[ 2*Nr + idx];
@@ -1085,7 +1128,7 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
   }
 }
 
-
+//segunda parte, sumar las  Nl  fluctuaciones de cada r
 __global__  void suma_fluct(double *temp_array , int Nl, int Nr){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   if(idx < Nr){
@@ -1100,12 +1143,16 @@ __global__  void suma_fluct(double *temp_array , int Nl, int Nr){
     }
   }
 }
+
+//Actualizar el tensro Stress_Energy
 __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, double *phi, double *A, double *B, double *alpha, double *temp_array , double dr, double dt, int Nr, int Nk, int Nl, int t){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   float epsilon = dr/2;
   double dt_phi, dr_phi;
   if(idx < Nr){
 
+
+    //calcular las distintas derivadas del campos clasico ( o phi )
     dt_phi = (phi[(t+1)*Nr + idx ] - phi[(t)*Nr +idx])/dt;
 
     if((t*Nr + idx)%Nr == 0){
@@ -1134,7 +1181,7 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
     double espectation_dtheta_phi;
     double espectation_dphi_phi;
 
-
+    //valor de espectacion de las derivadas
     espectation_dt_phi = dt_phi*dt_phi + temp_array[ idx ];
     espectation_dr_phi = dr_phi*dr_phi + temp_array[ 1*Nl*Nr + idx ];
     espectation_dr_dt_phi = dt_phi*dr_phi + temp_array[ 2*Nl*Nr + idx ];
@@ -1148,8 +1195,10 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
     xpichix = sqrt(A[idx])*B[idx]/alpha[idx] * espectation_dr_dt_phi;
     //Stress-Energy
 
+    //masa (para el campo phi mu = 0.0 y para los fantasmas 1 o sqrt(3)), mu = m*c/h, masa, velocidad de la luz y constante de plank reducida
     double mu = 1.0 + 4.0*sqrt(3.0);
 
+    //actualizacion
     rho[idx] =  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*espectation_dtheta_phi - 0.5*mu*phi[(t+1)*Nr + idx]*phi[(t+1)*Nr + idx];
 
     ja[idx] = - xpichix/(sqrt(A[idx])*B[idx]);
@@ -1180,6 +1229,8 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
   }
 
 }
+
+//remplazo el array de u por los valores de u_p1 ( su paso de tiempo)
 __global__ void cambio_u(cufftDoubleComplex *u, cufftDoubleComplex *u_p1, int Nr, int Nk, int Nl){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   __syncthreads();
@@ -1194,34 +1245,10 @@ __global__ void cambio_u(cufftDoubleComplex *u, cufftDoubleComplex *u_p1, int Nr
 }
 
 
-/*Define j0(z) */
-double b0(double z){
-  return sin(z)/z;
-}
+//condiciones iniciales
 
-/*Define j1(z) */
-double b1(double z){
-  return sin(z)/(z*z)-cos(z)/z;
-}
 
-/*Define jn(z) */
-double sjn(double z,int n){
-  double out;
-  if (n==0){
-      out = b0(z);
-  }
-  else if(n==1){
-      out = b1(z);
-  }
-  /*using recurrence relation */
-  else{
-      out = (2*n-1)*sjn(z,n-1)/z-sjn(z,n-2);
-  }
-  return out;
-}
-double f_sinc(double z){
-  return sin(z)/z;
-}
+
 
 void sjn(double *f,double z,double dr,int Nr,int n){
   double out;
@@ -1335,6 +1362,8 @@ void dr_u_initial(cufftDoubleComplex* dr_u,int k, int l,int Nk,int Nl,int Nr,dou
         }
     }
 }
+
+//iniciar phi
 void inicial_phi(double *phi, double dr,int Nr){
   double a=0.2;
   double std=1.5;
@@ -1344,8 +1373,9 @@ void inicial_phi(double *phi, double dr,int Nr){
 
     //phi[i]=a*exp(-( (i*dr-20.0) /std)*((i*dr-20.0) /std));
   }
- }
- double dfr(double r,double a,double std){
+}
+//iniciar A, dfr es la misma forma de phi, se ocupa para encontrar el punto medio de la derivada de phi cuando ocupo el RK4
+double dfr(double r,double a,double std){
   //return a*exp(-( (r-20.0) /std)*((r-20.0) /std));
   return a*(r-20.0)/std*exp(-( (r-20.0) /std)*((r-20.0) /std));
  }
@@ -1411,6 +1441,8 @@ void iniciar_A(double *A,double *chi, double dr,int Nr){
    A[idx]=A[idx-1]+dr*sumas;
   }
 }
+
+//rellenar un array
 void rellenar(double *f, int Nr,double num){
   for (int i=0;i<Nr;i++){
     f[i]=num;
@@ -1432,12 +1464,12 @@ int main(){
   double *A,*B,*alpha,*phi,*chi,*PI,*lambda,*K,*Kb,*U, *Da, *Db, *temp_phi, *temp_Kb,*temp_alpha;
   double *rho,*ja,*SA,*SB;
 
+  // Defino los array del cuda
 
   double *cuda_A,*cuda_B,*cuda_alpha,*cuda_phi,*cuda_chi,*cuda_PI,*cuda_lambda,*cuda_K,*cuda_Kb,*cuda_U, *cuda_Da, *cuda_Db, *cuda_temp_phi, *cuda_temp_Kb,*cuda_temp_alpha;
   double *cuda_rho,*cuda_ja,*cuda_SA,*cuda_SB;
 
   //double *K_s,*b_i, *a_ij, *c_i;
-  double *coef_atrasada,*coef_centrada,*coef_adelantada;
 
   //deltas
   double dr=20.0/Nr;
@@ -1470,26 +1502,10 @@ temp_alpha=(double *)malloc(Nt*Nr*sizeof(double));
   SB=(double *)malloc(Nr*sizeof(double));
 
 
-  coef_centrada=(double *)malloc(order*sizeof(double));
-  coef_atrasada=(double *)malloc(order*sizeof(double));
-  coef_adelantada=(double *)malloc(order*sizeof(double));
 
 
 
 
-cargar_coeff_centradas_df(coef_centrada,order);
-cargar_coeff_atrasada_df(coef_atrasada,order);
-cargar_coeff_adelantada_df(coef_adelantada,order);
-for (int i=0; i < order ;i++){
-  /*
-  coefficient_centrada[i]=coef_centrada[i];
-  coefficient_adelantada[i]=coef_adelantada[i];
-  coefficient_atrasada[i]=coef_atrasada[i];
-*/
-  host_coefficient_centrada[i]=coef_centrada[i];
-  host_coefficient_adelantada[i]=coef_adelantada[i];
-  host_coefficient_atrasada[i]=coef_atrasada[i];
-}
 
 printf("Diferencias finitas: check\n");
 
@@ -1497,7 +1513,7 @@ printf("Diferencias finitas: check\n");
 inicial_phi(phi,dr,Nr);
 inicial_phi(temp_phi,dr,Nr);
 
-difference_tenth(chi,phi,dr,Nr); 
+derivate(chi,phi,dr,Nr); 
 
 printf("Condiciones iniciales de phi y chi: check\n");
 
@@ -1520,9 +1536,10 @@ calculate_SA(SA,PI,chi,A,B,Nr);
 calculate_SB(SB,PI,chi,A,B,Nr);
 calculate_ja(ja,PI,chi,A,B,Nr);
 printf("Valores iniciales de Tuv: check\n");
+
 double *dr_A0;
 dr_A0=(double *)malloc(Nr*sizeof(double));
-difference_tenth(dr_A0,A,dr,Nr);
+derivate(dr_A0,A,dr,Nr);
 for(int idx=0;idx<Nr;idx++){
   if (idx==0){
     lambda[idx]=(1.0-A[idx]/B[idx])/(idx*dr+dr*0.5);      
@@ -1535,6 +1552,7 @@ for(int idx=0;idx<Nr;idx++){
 
 
 }
+//Comprobar como queda A
 guardar_salida_chi(A,Nr,1.0);
 
     timedif = ( ((double) clock()) / CLOCKS_PER_SEC) - time1;
@@ -1553,18 +1571,22 @@ cufftDoubleComplex *cuda_u_nodos_p1;
 cufftDoubleComplex *cuda_pi;
 cufftDoubleComplex *cuda_dr_u;
 
+
+//Nodos
 int Nk=20,Nl=20;
+
   u_nodos=(cufftDoubleComplex*)malloc(Nk*Nl*Nr*sizeof(cufftDoubleComplex));
   u_nodos_p1=(cufftDoubleComplex*)malloc(Nk*Nl*Nr*sizeof(cufftDoubleComplex));
 
   pi=(cufftDoubleComplex*)malloc(       Nk*Nl*Nr*sizeof(cufftDoubleComplex));
   dr_u=(cufftDoubleComplex*)malloc(     Nk*Nl*Nr*sizeof(cufftDoubleComplex));
 
-//pendiente inicial del A...
 // cuda mallocs
-    time1 = (double) clock();            /* get initial time */
+    time1 = (double) clock();            
     time1 = time1 / CLOCKS_PER_SEC; 
     int idk;
+
+    //Inicializar las variables de los nodos
     #pragma omp parallel for 
     for (idk=0;idk<Nk;idk++){
       for (int idl=0;idl<Nl;idl++){
@@ -1573,6 +1595,8 @@ int Nk=20,Nl=20;
           dr_u_initial(dr_u,idk,idl,Nk, Nl, Nr,dr);
       }
     }
+
+    //esta lineal parece no necesaria
     #pragma omp parallel for
     for (idk=0;idk<Nk;idk++){
       for (int idl=0;idl<Nl;idl++){
@@ -1587,7 +1611,7 @@ int Nk=20,Nl=20;
     timedif = ( ((double) clock()) / CLOCKS_PER_SEC) - time1;
     printf("The elapsed time is %lf seconds, opm\n", timedif);
 
-
+    // imprimir los valores reales de u
     for (int idk=0;idk<Nk;idk++){
       for (int idl=0;idl<Nl;idl++){
         printf("Reu_%d,%d = %.15lf \n",idk,idl,u_nodos[ idl*Nk*Nr + idk*Nr + 50 ].x);
@@ -1622,7 +1646,7 @@ printf("Condiciones iniciales: check\n");
 
 printf("Rho antes de la simulacion rho = %.15f\n",conservacion(rho,dr,Nr));
 
-//Cuda...
+//CUDA...
 
 
 cudaMalloc((void **)&cuda_phi, Nt*Nr*sizeof(double));
@@ -1744,15 +1768,22 @@ printf("thread = %d , block = %d , k_min = %lf ", thread , (int)ceil((float)(Nr*
 timedif = ( ((double) clock()) / CLOCKS_PER_SEC) - time1;
 printf("The elapsed time is %lf seconds, GPU\n", timedif);
 
+
+//cudamemcpy devuelta.
+
 cudaMemcpy(phi, cuda_phi, Nr*Nt*sizeof(double), cudaMemcpyDeviceToHost);
 /*
   for(int r=0; r<Nr; r++){
     printf("phi_%d : %.15f\n",r,phi[5*Nr + r]);
   }
 */
+
+//error cuda
 cudaError_t err = cudaGetLastError();
 printf("Error: %s\n",cudaGetErrorString(err));
 
+
+//guardar salida
 guardar_salida_phi(phi,Nr,Nt);
 
 
@@ -1764,3 +1795,5 @@ guardar_salida_phi(phi,Nr,Nt);
 
 
 //nota: sacar el puntero en las funcinoes, si quiero optimiazr, solo dejar el phi + dt a_ij K en la funciones  por ejemplo en vez de punteros en todas las funciones.
+
+//notas :  hacer mas free para los nodos y para cuda
