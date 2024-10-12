@@ -5,6 +5,10 @@
 #include <string.h>
 #include <cufft.h>
 #include <omp.h>
+#include <gsl/gsl_sf_bessel.h>
+
+#include <cuda_runtime.h>
+
 #define order 3
 #define consta_pi 3.1415
 #define consta_var 12
@@ -1248,7 +1252,9 @@ __global__ void cambio_u(cufftDoubleComplex *u, cufftDoubleComplex *u_p1, int Nr
 //condiciones iniciales
 
 
-
+double f_sinc(double z){
+  return sin(z)/z;
+}
 
 void sjn(double *f,double z,double dr,int Nr,int n){
   double out;
@@ -1283,31 +1289,12 @@ void u_initial(cufftDoubleComplex *u,int k, int l,int Nk,int Nl,int Nr,double dr
     temp = (double *)malloc(Nr*sizeof(double));
 
     for (int r=0 ; r<Nr ; r++){
-      if (r==0){
-        temp[r]=f_sinc(k_min*(k+1)*dr*0.5);
-      }
-      else{
-        temp[r]=f_sinc(k_min*(k+1)*dr*r);
-      }
-    }
-    
-    sjn(temp, k_min*(k+1)*dr ,dr,Nr,l);
-
-    for (int r=0 ; r<Nr ; r++){
-      if (r==0){        
-        temp[r]= pow(-1,l)*pow(k_min*(k+1)*dr*0.5 , l)*temp[r];
-      }
-      else{
-        temp[r]= pow(-1,l)*pow(k_min*(k+1)*dr*r , l)*temp[r];
-      }
-    }
-    for (int r=0 ; r<Nr ; r++){
         if (r==0){
-            u[id_u + r].x =  (k_min*(k+1)/sqrt(consta_pi * omega)) * temp[r] / (pow(dr*r+dr/2.0,l));
+            u[id_u + r].x =  (k_min*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,k_min*(k+1)*dr*0.5) / (pow(dr*r+dr/2.0,l));
             u[id_u + r].y = 0.0;
         }
         else{
-            u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * temp[r] / pow(dr*r,l);
+            u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,k_min*(k+1)*dr*r) / pow(dr*r,l);
             u[id_u + r].y=0.0;
 
         }
@@ -1322,13 +1309,13 @@ void pi_initial(cufftDoubleComplex* pi,int k, int l,int Nk,int Nl,int Nr,double 
     for (int r=0 ; r<Nr ; r++){
         if (r==0){
             pi[id_u + r].x = 0.0;
-            pi[id_u + r].y = -omega*(k_min*(k+1)/sqrt(consta_pi * omega)) * sjn(  0 , l ) / (pow(0,l));
+            pi[id_u + r].y = -omega*(k_min*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,k_min*(k+1)*dr*0.5) / (pow(0,l));
 
 
         }
         else{
             pi[id_u + r].x= 0.0;
-            pi[id_u + r].y = -omega*(k_min*(k+1)/sqrt(consta_pi * omega)) * sjn(  k_min*(k+1)*dr*r , l ) / pow(dr*r,l);
+            pi[id_u + r].y = -omega*(k_min*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,k_min*(k+1)*dr*r) / pow(dr*r,l);
 
         }
     }
@@ -1340,23 +1327,23 @@ void dr_u_initial(cufftDoubleComplex* dr_u,int k, int l,int Nk,int Nl,int Nr,dou
     double dr_j;
     for (int r=0 ; r<Nr ; r++){
         if (r==0){
-            dr_j= (-1.5*sjn(  0 , l ) + 2.0*sjn(  k_min*(k+1)*dr*(r+1) , l ) - 0.5*sjn(  k_min*(k+1)*dr*(r+2) , l ))/(dr);
+            dr_j= (-1.5*gsl_sf_bessel_jl(l,k_min*(k+1)*dr*r) + 2.0*gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r+1)  ) - 0.5*gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r+2) ))/(dr);
 
-            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * ( dr_j  / (pow(0.0,l)) -  sjn(  0.0 , l ) * l/ (pow(0.0,l+1)));
+            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * ( dr_j  / (pow(0.0,l)) -  gsl_sf_bessel_jl( l, 0.0  ) * l/ (pow(0.0,l+1)));
             dr_u[id_u + r].y = 0.0;
 
         }
         else if (r==Nr-1){
-            dr_j= (1.5*sjn(  k_min*(k+1)*dr*r , l )- 2.0*sjn(  k_min*(k+1)*dr*(r+1) , l ) + 0.5*sjn(  k_min*(k+1)*dr*(r+2) , l ))/(dr);
+            dr_j= (1.5*gsl_sf_bessel_jl( l, k_min*(k+1)*dr*r  )- 2.0*gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r+1)  ) + 0.5*gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r+2) ))/(dr);
 
-            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * ( dr_j / (pow(dr*r,l)) - sjn(  k_min*(k+1)*dr*r , l ) * l / (pow(dr*r,l+1)));
+            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) * ( dr_j / (pow(dr*r,l)) - gsl_sf_bessel_jl( l, k_min*(k+1)*dr*r  ) * l / (pow(dr*r,l+1)));
             dr_u[id_u + r].y = 0.0;
 
         }
         else{
-            dr_j= (sjn(  k_min*(k+1)*dr*(r+1) , l ) - sjn(  k_min*(k+1)*dr*(r-1) , l ))/(2.0*dr);
+            dr_j= (gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r+1)  ) - gsl_sf_bessel_jl( l, k_min*(k+1)*dr*(r-1)  ))/(2.0*dr);
 
-            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) *  ( dr_j / (pow(dr*r,l)) - sjn(  k_min*(k+1)*dr*r , l ) * l / (pow(dr*r,l+1)));
+            dr_u[id_u + r].x = (k_min*(k+1)/sqrt(consta_pi * omega)) *  ( dr_j / (pow(dr*r,l)) - gsl_sf_bessel_jl( l, k_min*(k+1)*dr*r  ) * l / (pow(dr*r,l+1)));
             dr_u[id_u + r].y = 0.0;
 
         }
@@ -1570,6 +1557,9 @@ cufftDoubleComplex *cuda_u_nodos_p1;
 
 cufftDoubleComplex *cuda_pi;
 cufftDoubleComplex *cuda_dr_u;
+
+//Ghost Fields
+
 
 
 //Nodos
@@ -1786,6 +1776,20 @@ printf("Error: %s\n",cudaGetErrorString(err));
 //guardar salida
 guardar_salida_phi(phi,Nr,Nt);
 
+size_t free_memory, total_memory;
+cudaMemGetInfo( &free_memory, &total_memory );
+
+//Memoria
+printf("Memoria libre: %zu bytes\n", free_memory);
+printf("Memoria total: %zu bytes\n", total_memory);
+
+//  MB para mayor claridad
+printf("Memoria libre: %.2f MB\n", free_memory / (1024.0 * 1024.0));
+printf("Memoria total: %.2f MB\n", total_memory / (1024.0 * 1024.0));
+
+double x = 5.0;
+double y = gsl_sf_bessel_J0 (x);
+printf ("J0(%g) = %.18e\n", x, y);
 
   free(phi);free(chi);free(PI);free(K);free(Kb);free(U);free(A);free(B);free(alpha);free(lambda);
 
