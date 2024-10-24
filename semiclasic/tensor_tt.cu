@@ -12,7 +12,7 @@
 #define order 3
 #define consta_pi 3.1415
 #define consta_var 12
-
+#define M 20.0
 
 //coeficientes de las diferencias finitas y RK4 para el host y el device
 
@@ -24,6 +24,8 @@ double host_c_i[4] = {0.0 , 0.5 , 0.5 , 1.0};
 double host_a_ij[4] = {0.0 , 0.5 , 0.5 , 1.0};
 
 __device__ double coefficient_adelantada[3] = {-1.5 ,2.0 ,-0.5};
+__device__ double coefficient_adelantada_cuarto[5] = {-25 ,48 ,-36, 16,-3};
+
 __device__ double coefficient_centrada[3] = {-0.5, 0.0, 0.5};
 __device__ double coefficient_atrasada[3] = {1.5, -2.0, 0.5};
 __device__ double b_i[4] = {1.0/6.0 , 1.0/3.0 , 1.0/3.0 , 1.0/6.0};
@@ -245,17 +247,17 @@ __device__ double derivate_RK( double *f,double *Kf, int idx,int s, int id_RK, d
 }
 //Derivada compleja considerando el runge_Kutta
 
-__device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDoubleComplex *Kf, int idx,int s, int id_RK, int idr, double dr,double dt, int Nr, int symmetric){
+__device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDoubleComplex *Kf, int idx,int s, int id_RK, int idr, double dr,double dt, int Nr, int l,int symmetric){
   cufftDoubleComplex temp ;
   temp.x = 0.0;
   temp.y = 0.0;
     if (idr==0){
-      if (symmetric==0){
+      if (l%2==0 ){
         temp.x = 0.0;
         temp.y = 0.0;
       }
-      else if (symmetric == 1){
-        for (int m=1;m<order;m++){
+      else {
+        for (int m=0;m<order;m++){
           temp.x += coefficient_adelantada[m]*(f[idx+m].x + dt*a_ij[s]*Kf[id_RK+m].x);
           temp.y += coefficient_adelantada[m]*(f[idx+m].y + dt*a_ij[s]*Kf[id_RK+m].y);
 
@@ -267,6 +269,12 @@ __device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDo
         temp += coefficient_adelantada[m]*(f[idx+m] + dt*a_ij[s]*Kf[(s)*Nr+idx+m]);
       }
     }*/
+
+    else if(idr==1){
+      temp.x= (-25*(f[idx+0].x + dt*a_ij[s]*Kf[id_RK+0].x) + 48*(f[idx+1].x + dt*a_ij[s]*Kf[id_RK+1].x) - 36*(f[idx+2].x + dt*a_ij[s]*Kf[id_RK+2].x)+ 16*(f[idx+3].x + dt*a_ij[s]*Kf[id_RK+3].x) - 3*(f[idx+4].x + dt*a_ij[s]*Kf[id_RK+4].x))/(12);
+      temp.y= (-25*(f[idx+0].y + dt*a_ij[s]*Kf[id_RK+0].y) + 48*(f[idx+1].y + dt*a_ij[s]*Kf[id_RK+1].y) - 36*(f[idx+2].y + dt*a_ij[s]*Kf[id_RK+2].y)+ 16*(f[idx+3].y + dt*a_ij[s]*Kf[id_RK+3].y) - 3*(f[idx+4].y + dt*a_ij[s]*Kf[id_RK+4].y))/(12);
+
+    }
     else if (idr > Nr-(int)(order-1)/2-1){
       for (int m=-order+1;m<1;m++){
         temp.x += coefficient_atrasada[-m]*(f[idx+m].x + dt*a_ij[s]*Kf[id_RK+m].x);
@@ -281,7 +289,7 @@ __device__ cufftDoubleComplex derivate_complex_RK( cufftDoubleComplex *f,cufftDo
 
       }
     }
-    temp.x /=dr;
+    temp.x =temp.x/dr;
     temp.y /=dr;
 
 
@@ -338,19 +346,24 @@ __device__ cufftDoubleComplex derivate_complex_nodos( cufftDoubleComplex *f, int
     temp.y = 0.0;
     int id = idx%Nr;
       if (id==0){
-        if (symmetric==0){
+        if (l%2==0 ){
           temp.x = 0.0;
           temp.y = 0.0;
         }
-        else if (symmetric == 1){
-          for (int m=1;m<order;m++){
+        else {
+          for (int m=0;m<order;m++){
             temp.x += coefficient_adelantada[m]*(f[idx+m].x*pow((id+m)*dr,l));
             temp.y += coefficient_adelantada[m]*(f[idx+m].y*pow((id+m)*dr,l) );
   
           }
         }
       }
+
+      else if(id==1){
+        temp.x= (-25*(f[idx+0].x*pow((id+0)*dr,l)) + 48*(f[idx+1].x *pow((id+1)*dr,l)) - 36*(f[idx+2].x*pow((id+2)*dr,l))+ 16*(f[idx+3].x *pow((id+3)*dr,l)) - 3*(f[idx+4].x *pow((id+4)*dr,l)))/(12);
+        temp.y= (-25*(f[idx+0].y*pow((id+0)*dr,l)) + 48*(f[idx+1].y *pow((id+1)*dr,l)) - 36*(f[idx+2].y*pow((id+2)*dr,l))+ 16*(f[idx+3].y *pow((id+3)*dr,l)) - 3*(f[idx+4].y *pow((id+4)*dr,l)))/(12);
   
+      }
       else if (id == Nr-1){
         for (int m=-order+1;m<1;m++){
           temp.x += coefficient_atrasada[-m]*(f[idx+m].x*pow((id+m)*dr,l) );
@@ -651,8 +664,14 @@ __device__ cufftDoubleComplex dr_u_dot(cufftDoubleComplex *pi, double *A, double
         }
       }
     }
+    else if (idr == 1){
+      for (int m=0;m<5;m++){
+        temp.x += coefficient_adelantada_cuarto[m]*(f_dr_u_dot(pi,A,B,alpha,RK_C,RK_Q, id_nodo + m , idr + m, space , s,dt, Nr, t , error, g)).x/12;
+        temp.y += coefficient_adelantada_cuarto[m]*(f_dr_u_dot(pi,A,B,alpha,RK_C,RK_Q, id_nodo + m , idr + m, space , s,dt, Nr, t , error, g)).y/12;
 
-    else if (idr > Nr-(int)(order-1)/2-1){
+      }
+    }
+      else if (idr > Nr-(int)(order-1)/2-1){
       for (int m=-order+1;m<1;m++){
         temp.x += coefficient_atrasada[-m]*(f_dr_u_dot(pi,A,B,alpha,RK_C,RK_Q, id_nodo + m , idr + m, space , s,dt, Nr, t , error, g)).x;
         temp.y += coefficient_atrasada[-m]*(f_dr_u_dot(pi,A,B,alpha,RK_C,RK_Q, id_nodo + m , idr + m, space , s,dt, Nr, t , error, g)).y;
@@ -668,8 +687,9 @@ __device__ cufftDoubleComplex dr_u_dot(cufftDoubleComplex *pi, double *A, double
     }
  
 
+    temp.x = temp.x/dr;
+    temp.y = temp.y/dr;
 
-  
     return temp;
 }
 
@@ -714,31 +734,50 @@ __device__ double metric_pi_dot( double *A, double *B,double *alpha, int idr, in
     return temp/dr;
 }
 __device__ cufftDoubleComplex f_pi_dot(cufftDoubleComplex *u, cufftDoubleComplex *dr_u,double *A, double *B,double *alpha, double *lambda, double *RK_C, cufftDoubleComplex *RK_Q, 
-                                      double radio,  int id_nodo, int idr , int space, int s, int k, int l, double dt,double dr, int Nr,  int t, int error, int g){
+                                      double radio,  int id_nodo, int idr , int space, int s, int k, int l, double dt,double dr, int Nr,  int t, int error, int g, double mass){
 
-  double f1, f2, f3;
+  double f1, f2, f3, f4;
   cufftDoubleComplex Z;
 
 
   f1 =  l/radio * (u[g*space + id_nodo].x + dt*a_ij[s] * RK_Q[ g*3*space + 0*space + id_nodo].x) + (dr_u[g*space + id_nodo].x + dt*a_ij[s] * RK_Q[ g*3*space + space + id_nodo].x) ;
 
-  f2 = (2.0*l+2.0)/radio * (dr_u[g*space + id_nodo].x + dt* a_ij[s] * RK_Q[ g*3*space + space + id_nodo].x)  + derivate_complex_RK(dr_u, RK_Q, g*space +  id_nodo, s , g*3*space + space + id_nodo, idr, dr, dt,Nr,1).x;
+  f2 = (2.0*l+2.0)/radio * (dr_u[g*space + id_nodo].x + dt* a_ij[s] * RK_Q[ g*3*space + space + id_nodo].x)  + derivate_complex_RK(dr_u, RK_Q, g*space +  id_nodo, s , g*3*space + space + id_nodo, idr, dr, dt,Nr, l,1).x;
 
   f3 = l*(l+1)/radio *(lambda[idr] + dt * a_ij[s] * RK_C[ 10*Nr + idr ])*(u[g*space + id_nodo].x + dt*a_ij[s] * RK_Q[ g*3*space + 0*space + id_nodo].x);
+
+  f4 = mass*mass*u[g*space + id_nodo].x*u[g*space + id_nodo].x;
+
+  if(id_nodo==10002 ){
+    printf("g : %d\n", g);
+    printf("f1 = %f\n",f1);
+    printf("f2 = %f\n",f2);
+    printf(" dr_u_rk: %f\n", derivate_complex_RK(dr_u, RK_Q, g*space +  id_nodo, s , g*3*space + space + id_nodo, idr, dr, dt,Nr, l,1).x);
+    printf("f3 = %f\n",f3);
+    printf("f4 = %f\n",f4);
+
+
+  }
 
 
   Z.x = metric_pi_dot(A,B,alpha,idr,s,dr,dt, RK_C ,0,Nr, t , error) * f1 +  
   (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f2 +
-  (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f3;
+  (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f3 + f4;
 
+  if(id_nodo==10002 ){
+    printf("Z = %f\n",Z.x);
+
+
+  }
 
   f1 =  l/radio * (u[g*space + id_nodo].y + dt*a_ij[s] * RK_Q[g*3*space +  0*space + id_nodo].y) + (dr_u[g*space + id_nodo].y + dt*a_ij[s] * RK_Q[ g*3*space + space + id_nodo].y) ;
-  f2 = (2.0*l+2.0)/radio * (dr_u[g*space + id_nodo].y + dt*a_ij[s] * RK_Q[ g*3*space + space + id_nodo].y)  + derivate_complex_RK(dr_u, RK_Q, g*space + id_nodo, s ,g*3*space + space + id_nodo, idr, dr, dt,Nr,1).y;
+  f2 = (2.0*l+2.0)/radio * (dr_u[g*space + id_nodo].y + dt*a_ij[s] * RK_Q[ g*3*space + space + id_nodo].y)  + derivate_complex_RK(dr_u, RK_Q, g*space + id_nodo, s ,g*3*space + space + id_nodo, idr, dr, dt,Nr,l,1).y;
   f3 = l*(l+1)/radio *(lambda[idr] + dt * a_ij[s] * RK_C[ 10*Nr + idr ])*(u[g*space + id_nodo].y + dt*a_ij[s] * RK_Q[ g*3*space + 0*space + id_nodo].y);
+  f4 = mass*mass*u[g*space + id_nodo].y*u[g*space + id_nodo].y;
 
   Z.y = metric_pi_dot(A,B,alpha,idr,s,dr,dt, RK_C ,0,Nr , t ,error) * f1 +  
   (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f2 +
-  (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f3;
+  (alpha[idr] + dt * a_ij[s] * RK_C[ 5*Nr + idr ]) * ( B[idr] + dt * a_ij[s] * RK_C[ 4*Nr + idr ]) /(sqrt(A[idr] + dt * a_ij[s] * RK_C[ 3*Nr + idr ])) * f3 + f4;
 
   if (error==0 && t==0 && id_nodo == 50){
     printf("f_pi_dot == check\n");
@@ -772,14 +811,17 @@ __global__ void Runge_kutta_classic(double *phi, double *chi, double *PI, double
     double epsilon = dr/2.0;
                               
     double cosmology;
-    double M = 10.0;
+    //double M = Nk*dk;
     //if(t==0){
         //rho[Nr] = rho[0];
       //}
       //cosmology = -0.5*1.0*log(1.0/M); 
       //cosmology=0.0;
       //cosmology = cosmological( A, B, alpha, Da, Db, K, Kb, lambda, U,rho ,dr,dt)/(alpha[0]*alpha[0]);
-      cosmology = rho[0];
+      if(idx==0){
+        cosmology = rho[0];
+        rho[0] = rho[0] - cosmology;
+      }
 
     if(idx==50 && s==3){
       printf("cosmogical = %f\n",cosmology);
@@ -992,7 +1034,7 @@ __global__ void Runge_kutta_nodos(double *A, double *B, double *alpha,double *la
         */
 
         //pi
-    temp_Q = f_pi_dot( u ,dr_u , A, B, alpha, lambda ,  RK_C, RK_Q, radio,  idx, idr, Nk*Nr*Nl,s, k, l, dt, dr, Nr, t , error, 0);
+    temp_Q = f_pi_dot( u ,dr_u , A, B, alpha, lambda ,  RK_C, RK_Q, radio,  idx, idr, Nk*Nr*Nl,s, k, l, dt, dr, Nr, t , error, 0,0.0);
     RK_Q_temp[2*Nl*Nk*Nr + idx].x =  temp_Q.x;
     RK_Q_temp[2*Nl*Nk*Nr + idx].y =  temp_Q.y;
     /* if(s==0){
@@ -1053,10 +1095,20 @@ __global__ void Runge_kutta_nodos(double *A, double *B, double *alpha,double *la
         int k,l;
         k = id_nodo%Nk;
         l = (int)id_nodo/Nl;
-
+        double mass;
+        
+        if (g==2 || g==0){
+            mass = 1.0;
+        }
+        else if (g==4){
+            mass = 1.0*sqrt(4.0);
+        }
+        else{
+            mass = 1.0*sqrt(3.0); 
+        }
         
         //pi
-        temp_Q = f_pi_dot( u_ghost ,dr_u_ghost , A, B, alpha, lambda ,  RK_C, RK_G, radio,  idx, idr, Nk*Nr*Nl,s, k, l, dt, dr, Nr, t , error, g);
+        temp_Q = f_pi_dot( u_ghost ,dr_u_ghost , A, B, alpha, lambda ,  RK_C, RK_G, radio,  idx, idr, Nk*Nr*Nl,s, k, l, dt, dr, Nr, t , error, g,mass);
         RK_G_temp[ g*3*Nl*Nk*Nr + 2*Nl*Nk*Nr + idx].x =  temp_Q.x;
         RK_G_temp[ g*3*Nl*Nk*Nr + 2*Nl*Nk*Nr + idx].y =  temp_Q.y;
 
@@ -1098,7 +1150,7 @@ int idx = threadIdx.x + blockDim.x*blockIdx.x;
         //PI[idx] -= dt*Kreiss_Oliger(PI,idx,Nr,0.1);
         //chi[idx] -= dt*Kreiss_Oliger(chi,idx,Nr,0.1);
             for(int r =0 ; r<Nr ; r++){
-
+/*
                 A[r] -= dt*Kreiss_Oliger(A,r,Nr,0.05);
                 B[r] -= dt*Kreiss_Oliger(B,r,Nr,0.05);
                 alpha[r] -= dt*Kreiss_Oliger(alpha,r,Nr,0.05);
@@ -1106,7 +1158,7 @@ int idx = threadIdx.x + blockDim.x*blockIdx.x;
                 Db[r] += dt*Kreiss_Oliger(Db,r,Nr,0.05);
                 Kb[r] += dt*Kreiss_Oliger(Kb,r,Nr,0.05);
                 K[r] += dt*Kreiss_Oliger(K,r,Nr,0.05);
-                U[r] -= dt*Kreiss_Oliger(U,r,Nr,0.05);
+                U[r] -= dt*Kreiss_Oliger(U,r,Nr,0.05);*/  
             }
         //NOTA: kreiss oliger no funciona teniendo cada thread como un punto de la grilla.
         //lambda[idx] -= dt*Kreiss_Oliger(lambda,idx,Nr,0.1);
@@ -1117,6 +1169,23 @@ int idx = threadIdx.x + blockDim.x*blockIdx.x;
         for (int k =0; k<Nk ; k ++){
             for(int l=0 ; l<Nl ;l++){
                 for(int r =0 ; r<Nr ; r++){
+                  if(l>0){
+
+                    u_p1[l*Nk*Nr + k*Nr + 0].x = (4.0*u_p1[l*Nk*Nr + k*Nr + 1].x -u_p1[l*Nk*Nr + k*Nr + 2].x)/3.0;
+                    u_p1[l*Nk*Nr + k*Nr + 0].y = (4.0*u_p1[l*Nk*Nr + k*Nr + 1].y -u_p1[l*Nk*Nr + k*Nr + 2].y)/3.0;
+                    pi[l*Nk*Nr + k*Nr + 0].x = (4.0*pi[l*Nk*Nr + k*Nr + 1].x -pi[l*Nk*Nr + k*Nr + 2].x)/3.0;
+                    pi[l*Nk*Nr + k*Nr + 0].y = (4.0*pi[l*Nk*Nr + k*Nr + 1].y -pi[l*Nk*Nr + k*Nr + 2].y)/3.0;
+                    if(l%2==0){
+                      dr_u[l*Nk*Nr + k*Nr + 0].x = 0.0;
+                      dr_u[l*Nk*Nr + k*Nr + 0].y =0.0;
+                    }
+                    else{
+                      dr_u[l*Nk*Nr + k*Nr + 0].x = (4.0*dr_u[l*Nk*Nr + k*Nr + 1].x -dr_u[l*Nk*Nr + k*Nr + 2].x)/3.0;;
+                      dr_u[l*Nk*Nr + k*Nr + 0].y =(4.0*dr_u[l*Nk*Nr + k*Nr + 1].y -dr_u[l*Nk*Nr + k*Nr + 2].y)/3.0;;
+                    }
+
+                  }
+
 /*
                     u_p1[l*Nk*Nr + k*Nr + r].x += dt*Kreiss_Oliger_Cx(u_p1,l*Nk*Nr + k*Nr + r,Nr,0.5).x; 
                     u_p1[l*Nk*Nr + k*Nr + r].y += dt*Kreiss_Oliger_Cx(u_p1,l*Nk*Nr + k*Nr + r,Nr,0.5).y; 
@@ -1139,7 +1208,24 @@ int idx = threadIdx.x + blockDim.x*blockIdx.x;
         }
       }
 
-    
+      for( int g=0 ; g<5 ; g++){
+        for (int k =0; k<Nk ; k ++){
+          for(int l=0 ; l<Nl ;l++){
+              for(int r =0 ; r<Nr ; r++){
+                if(l>0){
+
+                  u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].x = (4.0*u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 1].x -u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 2].x)/3.0;
+                  u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].y = (4.0*u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 1].y -u_p1_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 2].y)/3.0;
+
+                  pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].x = (4.0*pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 1].x -pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 2].x)/3.0;
+                  pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].y = (4.0*pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 1].y -pi_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 2].y)/3.0;
+                  dr_u_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].x = 0.0;
+                  dr_u_ghost[g*Nk*Nl*Nr + l*Nk*Nr + k*Nr + 0].y =0.0;
+                }
+              }
+            }
+          }
+      }
 
         if (idx==2){
             //A[idx-2]=B[idx-2];
@@ -1171,6 +1257,47 @@ __global__ void Evolucion(double *phi, double *chi, double *PI, double *A, doubl
 
 
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
+    if(idx%Nr==3 && t%1==0 && idx/Nr/Nk ==  2 && idx/Nr%Nk==0){
+      printf("Re(u) 0,17: %.15f\n",u[idx+1].x);
+
+      printf("Re(u) %d,%d, %d ,%d: %.15f\n",idx%Nr, idx/Nr/Nk,t,idx, u[ idx].x);
+      printf("Re(u) 0,17: %.15f\n",u[ idx-1].x);
+      printf("Re(u) 0,17: %.15f\n",u[idx-2].x);
+      printf("Re(u) 0,17: %.15f\n",u[idx-3].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx+1].x);
+
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-1].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-2].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-3].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx+1].x);
+
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-1].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-2].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-3].x);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-1].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-2].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-3].y);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx].x);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx-1].x);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx-2].x);
+
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx ].x);
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -1 ].x);
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -2 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -1 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -2 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -3 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -1 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -2 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -3 ].x);
+
+    }
+
 
     if(idx < Nr){
         phi[(t+1)*Nr +idx] = phi[t*Nr +idx] + dt*RK_C_reduce[0*Nr + idx];
@@ -1221,7 +1348,7 @@ __global__ void Evolucion(double *phi, double *chi, double *PI, double *A, doubl
 
     //codiciones de borde 
 
-
+/*
     if(idx==2 && t%1==0){
       printf("Re(u) 0,17: %.15f\n",u[ idx].x);
       printf("Re(u) 0,17: %.15f\n",u[ idx-1].x);
@@ -1239,6 +1366,48 @@ __global__ void Evolucion(double *phi, double *chi, double *PI, double *A, doubl
       printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx ].x);
       printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -1 ].x);
       printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -2 ].x);
+    }*/
+    __syncthreads();
+    if(idx%Nr==3 && t%1==0 && idx/Nr/Nk ==  2 && idx/Nr%Nk==0){
+      printf("Re(u) 0,17: %.15f\n",u[idx+1].x);
+
+      printf("Re(u) %d,%d, %d ,%d: %.15f\n",idx%Nr, idx/Nr/Nk,t,idx, u[ idx].x);
+      printf("Re(u) 0,17: %.15f\n",u[ idx-1].x);
+      printf("Re(u) 0,17: %.15f\n",u[idx-2].x);
+      printf("Re(u) 0,17: %.15f\n",u[idx-3].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx+1].x);
+
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-1].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-2].x);
+      printf("Re(u) 0,17: %.15f\n",dr_u[ idx-3].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx+1].x);
+
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-1].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-2].x);
+      printf("Re(pi) 0,17: %.15f\n",pi[ idx-3].x);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-1].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-2].y);
+      printf("Im(pi) 0,17: %.15f\n",pi[ idx-3].y);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx].x);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx-1].x);
+      printf("Re(u_pi) 0,17: %.15f\n",u_p1[ idx-2].x);
+
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx ].x);
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -1 ].x);
+      printf("Re(duce) : %.15f\n",RK_G_reduce[ 0*Nl*Nk*Nr + idx -2 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -1 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -2 ].x);
+      printf("dr(duce) : %.15f\n",RK_G_reduce[ 1*Nl*Nk*Nr + idx -3 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx ].x);
+
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -1 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -2 ].x);
+      printf("pi(duce) : %.15f\n",RK_G_reduce[ 2*Nl*Nk*Nr + idx -3 ].x);
+
     }
 
 
@@ -1291,7 +1460,7 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
                               double dr, double dk, double dt, int Nr, int Nk , int Nl, int l, int t ){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   double radio;
-  float epsilon = dr/2;
+  double epsilon = dr/2;
   //temp_fluct (5xNr)
   double cte= 1.0/(4.0*3.1415);
   double u_snake;
@@ -1300,7 +1469,7 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
   //radio
   if (idx < Nr){
     if(idx==0){
-      radio=dr/2.0;
+      radio=0.0*dr/2.0;
     }
     else{
       radio=idx*dr;
@@ -1327,12 +1496,8 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
 
 
 
-      /*
-      if(idx==0 && l==0){
-        printf("d_u_temp_x = %.15f  |  k = %d\n",d_u_temp_x,k);
-          printf("u = %.15lf * radio = %f, k = %d|\n",u[l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
-          printf("u_p1 = %.15f * radio = %f, k = %d|\n", u_p1[  l*Nk*Nr + k*Nr + idx].x,pow(radio , l),k);
-      }*/
+      
+
       if (k==0){
         temp_fluct[ 0*Nr + idx] = d_u_temp_x*d_u_temp_x + d_u_temp_y*d_u_temp_y;
       }
@@ -1352,7 +1517,6 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     temp_fluct[ 0*Nr + idx] = temp_fluct[ 0*Nr + idx] * (2.0*l + 1.0) * cte * dk/3.0;
 
 
-
     //reiniciar 
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
@@ -1364,8 +1528,11 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
         //d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l);
         //d_u_temp_y = dr_u[l*Nk*Nr + k*Nr + idx].y* pow(radio , l);
         if(t==0){
-            d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l) ;
-            d_u_temp_y = 0.0;
+          res = derivate_complex_nodos(u, l*Nk*Nr + k*Nr + idx, dr,Nr,l,0 );
+          d_u_temp_x = res.x ;
+          d_u_temp_y = res.y ;
+            //d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l) ;
+            //d_u_temp_y = 0.0;
           }
           else{
             res = derivate_complex_nodos(u_p1,  l*Nk*Nr + k*Nr + idx, dr,Nr,l,0 );
@@ -1376,10 +1543,10 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
       if (k==0){
         temp_fluct[ 1*Nr + idx] = d_u_temp_x*d_u_temp_x + d_u_temp_y*d_u_temp_y;
       }
-      else if (k%2==0 && k>0 &&k<Nk-1){
+      else if (k%2==0 && k>0 && k<Nk-1){
         suma_par += 4.0*( d_u_temp_x*d_u_temp_x + d_u_temp_y*d_u_temp_y);
       }
-      else if (k%2==1 && k>0 &&k<Nk-1){
+      else if (k%2==1 && k>0 && k<Nk-1){
         suma_impar += 2.0*( d_u_temp_x*d_u_temp_x + d_u_temp_y*d_u_temp_y);
       }
       else if (k==Nk-1){
@@ -1401,8 +1568,11 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
         //d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l) * pi[l*Nk*Nr + k*Nr + idx].x* pow(radio , l);
         //d_u_temp_y = dr_u[l*Nk*Nr + k*Nr + idx].y* pow(radio , l) * pi[l*Nk*Nr + k*Nr + idx].y* pow(radio , l);
         if(t==0){
-            d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l) * pi[l*Nk*Nr + k*Nr + idx].y *pow(radio , l);
-            d_u_temp_y = 0.0;
+          res = derivate_complex_nodos(u, l*Nk*Nr + k*Nr + idx, dr,Nr,l,0 );
+          d_u_temp_x = res.x * pi[ l*Nk*Nr + k*Nr + idx].x *pow(radio , l);
+          d_u_temp_y = res.y * pi[ l*Nk*Nr + k*Nr + idx].y *pow(radio , l);
+            //d_u_temp_x = dr_u[l*Nk*Nr + k*Nr + idx].x* pow(radio , l) * pi[l*Nk*Nr + k*Nr + idx].y *pow(radio , l);
+            //d_u_temp_y = 0.0;
           }
           else{
             res = derivate_complex_nodos(u_p1,  l*Nk*Nr + k*Nr + idx, dr,Nr,l,0 );
@@ -1426,11 +1596,16 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
     temp_fluct[ 2*Nr + idx] += suma_impar + suma_par ;
     temp_fluct[ 2*Nr + idx] = temp_fluct[ 2*Nr + idx]  * (2*l + 1) * cte* dk/3.0;
 
+    if(idx==0 ){
+      printf("temp_fluct = %.15f  |  l=%d\n",temp_fluct[ 0*Nr + idx], l);
 
+    }
 
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
+    double suma_impar2 = 0.0 ;
 
+    temp_fluct[ 3*Nr + idx] =0.0;
         //fluctuacion theta theta
     for (int k=0 ; k < Nk ; k++){
         if (t==0){
@@ -1444,22 +1619,28 @@ __global__ void fluctuation( cufftDoubleComplex *u, cufftDoubleComplex *u_p1, cu
       if (k==0){
         temp_fluct[ 3*Nr + idx] = u_snake;
       }
-      else if (k%2==0 && k>0 &&k<Nk-1){
-        suma_par += 4.0*( u_snake );
+      else if (k%3==0 && k>0 &&k<Nk-1){
+        suma_par += 2.0*( u_snake );
       }
-      else if (k%2==1 && k>0 &&k<Nk-1){
-        suma_impar += 2.0*( u_snake );
+      else if (k%3==1 && k>0 &&k<Nk-1){
+        suma_impar += 3.0*( u_snake );
+      }
+      else if (k%3==2 && k>0 &&k<Nk-1){
+        suma_impar2 += 3.0*( u_snake );
       }
       else if (k==Nk-1){
         temp_fluct[ 3*Nr + idx] += ( u_snake );
       }
-
+      if(idx==0 && l==0){
+        printf("d_u_temp_x = %.15f  |  k = %d\n",u_snake,k);
+      }
     }
-    temp_fluct[ 3*Nr + idx] += suma_impar + suma_par ;
-    temp_fluct[ 3*Nr + idx] = temp_fluct[ 3*Nr + idx] * 0.5 * (l+1)*(2*l + 1) * cte* dk/3.0;
+    temp_fluct[ 3*Nr + idx] += suma_impar + suma_par + suma_impar2 ;
+    temp_fluct[ 3*Nr + idx] = temp_fluct[ 3*Nr + idx] * 0.5 * (l+1)*(2*l + 1) * cte* dk*3.0/8.0;
 
     suma_par = 0.0 ;
     suma_impar = 0.0 ;
+
 
     double angle;
     angle = acos( idx*(Nr-1)/(idx*dr) );
@@ -1530,7 +1711,7 @@ __global__  void suma_fluct(double *temp_array , int Nl, int Nr){
     //radio
     if (idx < Nr){
       if(idx==0){
-        radio=dr/2.0;
+        radio=0.0*dr/2.0;
       }
       else{
         radio=idx*dr;
@@ -1757,7 +1938,7 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
 
     double  radio;
     if(idx==0){
-      radio=idx*dr + dr/2.0;
+      radio=idx*dr + dr*0.1;
     }
     else{
       radio=idx*dr;
@@ -1794,7 +1975,10 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
 
 
     //actualizacion
-    rho[idx] =  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*espectation_dtheta_phi ;
+
+     rho[idx] =  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*espectation_dtheta_phi ;
+
+    
 
     ja[idx] = - xpichix/(sqrt(A[idx])*B[idx]);
 
@@ -1802,12 +1986,12 @@ __global__ void stress_energy(double *SA, double *SB, double *rho, double *ja, d
 
     SB[idx] = 1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) - xchi2x) ;
     
-    if(idx==0 &&  t<50){
+    if(idx==1 &&  t<50){
       printf("Stress_Energy en t= %d | idx : %d:\n",t,idx); 
 
         printf(" <x|PI|x>^2 = %1.5f\n",xPI2x);
         printf(" <x|chi|x>^2 = %1.5f\n",xchi2x);
-        printf(" <x|PI chi|x>^2 = %1.5f\n",xpichix);
+        printf(" <x|PI chi|x>^2 = %1.5f\n",temp_array[ 2*Nl*Nr + idx ]);
         printf(" <x|theta|x>^2 = %1.5f\n",temp_array[ 3*Nl*Nr + idx ]);
         printf(" <x|phi|x>^2 = %1.5f\n",temp_array[ 4*Nl*Nr + idx ]);
         printf("alpha : %.15f\n",alpha[idx]);
@@ -1836,7 +2020,7 @@ __global__ void stress_energy_ghost(double *SA, double *SB, double *rho, double 
   
       double  radio;
       if(idx==0){
-        radio=idx*dr + dr/2.0;
+        radio=idx*dr + dr*0.1;
       }
       else{
         radio=idx*dr;
@@ -1864,8 +2048,9 @@ __global__ void stress_energy_ghost(double *SA, double *SB, double *rho, double 
   
       //actualizacion
       if (g == 0 || g == 2 || g == 4){
+
         rho[idx] -=  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*temp_array[ 3*Nl*Nr + idx ] - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
-    
+        
         ja[idx] -= - xpichix/(sqrt(A[idx])*B[idx]);
     
         SA[idx] -= 1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) - 1.0/(B[idx]*radio*radio)*temp_array[ 3*Nl*Nr + idx ] - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
@@ -1873,8 +2058,9 @@ __global__ void stress_energy_ghost(double *SA, double *SB, double *rho, double 
         SB[idx] -= 1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) - xchi2x)  - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
       }
       else{
-        rho[idx] +=  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*temp_array[ 3*Nl*Nr + idx ] - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
-    
+
+          rho[idx] +=  1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) + 1.0/(B[idx]*radio*radio)*temp_array[ 3*Nl*Nr + idx ] - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
+        
         ja[idx] += - xpichix/(sqrt(A[idx])*B[idx]);
     
         SA[idx] += 1.0/(2.0*A[idx]) * (xPI2x/(B[idx]*B[idx]) + xchi2x) - 1.0/(B[idx]*radio*radio)*temp_array[ 3*Nl*Nr + idx ] - 0.5*mu*mu*temp_array[ 4*Nl*Nr + idx ];
@@ -1883,11 +2069,13 @@ __global__ void stress_energy_ghost(double *SA, double *SB, double *rho, double 
       }
           
 
-      if(idx== 0){
+      if(idx== 1){
       printf("Stress_Energy en t= %d:\n",t); 
           printf(" <x|PI|x>^2 = %1.5f\n",xPI2x);
+          printf(" temp = %1.5f\n",temp_array[idx]);
+
           printf(" <x|chi|x>^2 = %1.5f\n",xchi2x);
-          printf(" <x|PI chi|x>^2 = %1.5f\n",xpichix);
+          printf(" <x|PI chi|x>^2 = %1.5f\n",temp_array[ 2*Nl*Nr + idx ]);
           printf(" <x|theta|x>^2 = %1.5f\n",temp_array[ 3*Nl*Nr + idx ]);
           printf(" <x|phi|x>^2 = %1.5f\n",temp_array[ 4*Nl*Nr + idx ]);
 
@@ -1907,6 +2095,11 @@ __global__ void Tensor_tt(double * T_tt, double *rho, int t, int Nr){
   int idx = threadIdx.x + blockDim.x*blockIdx.x;
   if(idx<Nr){
     T_tt[ t*Nr + idx] = rho[idx];
+  }
+  if(idx==0){
+    for (int r=0 ; r<Nr ; r++){
+      printf("rho[%d] = %f\n", r,rho[r]);
+    }
   }
 }
 
@@ -1940,7 +2133,7 @@ void u_initial(cufftDoubleComplex *u,int k, int l, int field, int Nk,int Nl,int 
         if (r==0){
             //u[id_u + r].x=0.0;
 
-            u[id_u + r].x = (dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*0.01) / (pow(dr*r+dr/2.0,l));
+            u[id_u + r].x = (dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*0.0) / (pow(dr*r+dr/2.0,l));
             u[id_u + r].y = 0.0;
         }
         else{
@@ -1962,7 +2155,7 @@ void pi_initial(cufftDoubleComplex* pi,int k, int l,int field, int Nk,int Nl,int
             pi[id_u + r].x = 0.0;
             //pi[id_u + r].y= 0.0;
 
-            pi[id_u + r].y = -omega*(dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*0.01) / (pow(dr*0.5,l));
+            pi[id_u + r].y = -omega*(dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*0.0) / (pow(dr*0.5,l));
 
 
         }
@@ -2081,7 +2274,7 @@ void iniciar_A(double *A,double *chi, double dr,int Nr){
         rs= dr*(idx-1)+dr*host_c_i[s];
       }
             chi0= temp/dr; 
-      ks[s+1]= A0*((1.0/rs)*(1.0-A0)+rs*chi0*chi0*0.5 - rs*A0* 0.0);
+      ks[s+1]= A0*((1.0/rs)*(1.0-A0)+rs*chi0*chi0*0.5 + rs*A0*0.0);
 
       sumas += host_b_i[s]*ks[s+1];
     }
@@ -2300,11 +2493,17 @@ int Nk=20,Nl=20;
     for (int idk=0;idk<Nk;idk++){
       for (int idl=0;idl<Nl;idl++){
         for(int idr =0 ; idr<Nr ;idr++){
-          if(idr==0){
+          if(idr==0 ){
             dr_u[idl*Nk*Nr + idk*Nr + idr].x= (-1.5*u_nodos[ idl*Nk*Nr + idk*Nr + idr ].x + 2.0*u_nodos[ idl*Nk*Nr + idk*Nr + 1+idr ].x - 0.5*u_nodos[ idl*Nk*Nr + idk*Nr + 2+idr ].x)/dr;
+            if(idr==0 && idl%2==0){
+              dr_u[idl*Nk*Nr + idk*Nr + idr].x = 0.0;
+            }
           }
           else if(idr==Nr-1){
             dr_u[idl*Nk*Nr + idk*Nr + idr].x= (1.5*u_nodos[ idl*Nk*Nr + idk*Nr + idr ].x - 2.0*u_nodos[ idl*Nk*Nr + idk*Nr - 1+idr ].x + 0.5*u_nodos[ idl*Nk*Nr + idk*Nr - 2+idr ].x)/dr;
+          }
+          else if(idr==1){
+            dr_u[idl*Nk*Nr + idk*Nr + idr].x= (-25*u_nodos[ idl*Nk*Nr + idk*Nr + idr ].x + 48*u_nodos[ idl*Nk*Nr + idk*Nr + 1+idr ].x - 36*u_nodos[ idl*Nk*Nr + idk*Nr + 2+idr ].x + 16*u_nodos[ idl*Nk*Nr + idk*Nr +idr +3 ].x - 3*u_nodos[ idl*Nk*Nr + idk*Nr +idr +4].x)/(12*dr);
           }
           else{
             dr_u[idl*Nk*Nr + idk*Nr + idr].x= (0.5*u_nodos[ idl*Nk*Nr + idk*Nr + idr +1].x - 0.5*u_nodos[ idl*Nk*Nr + idk*Nr +idr -1 ].x)/dr;
@@ -2323,7 +2522,14 @@ int Nk=20,Nl=20;
         for(int idr =0 ; idr<Nr ;idr++){
           if(idr==0){
             dr_u_ghost[g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr].x= (-1.5*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr ].x + 2.0*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + 1+idr ].x - 0.5*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + 2+idr ].x)/dr;
+            if(idl%2==0){
+              dr_u_ghost[g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr].x = 0.0;
+            }
           }
+        
+        else if(idr==1){
+          dr_u_ghost[idl*Nk*Nr + idk*Nr + idr].x= (-25*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr ].x + 48*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + 1+idr ].x - 36*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + 2+idr ].x + 16*u_ghost[g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr +idr +3 ].x - 3*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr +idr +4].x)/(12*dr);
+        }
           else if(idr==Nr-1){
             dr_u_ghost[g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr].x= (1.5*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr + idr ].x - 2.0*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr - 1+idr ].x + 0.5*u_ghost[ g*Nl*Nk*Nr + idl*Nk*Nr + idk*Nr - 2+idr ].x)/dr;
           }
@@ -2488,7 +2694,7 @@ time1 = time1 / CLOCKS_PER_SEC;
 
 
 printf("thread = %d , block = %d , dk = %lf ", thread , (int)ceil((float)(Nr*Nk*Nl)/thread) , dk);
-  for (int t = 0 ; t < 100   ; t++ ){
+  for (int t = 0 ; t < 10   ; t++ ){
 
 
     for (int l = 0 ; l < Nl; l++ ){
