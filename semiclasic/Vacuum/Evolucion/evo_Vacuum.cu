@@ -19,7 +19,7 @@
 
 
 //Derivate
-#define order 5
+#define order 11
 #define host_order 3
 
 #define half_order_right (int)(order+1)/2
@@ -53,8 +53,12 @@ double host_a_ij[4] = {0.0 , 0.5 , 0.5 , 1.0};
 //__device__ double coefficient_atrasada[3] = {1.5, -2.0, 0.5};
 
 __device__ double coefficient_adelantada[5] = {-25.0/12.0 ,4.0, -3.0, 4.0/3.0 ,-1.0/4.0};
-__device__ double coefficient_centrada[5] = {1.0/12.0, -2.0/3.0, 0.0, 2.0/3.0,-1.0/12.0};
+//__device__ double coefficient_centrada[5] = {1.0/12.0, -2.0/3.0, 0.0, 2.0/3.0,-1.0/12.0};
 //__device__ double coefficient_centrada[7] = {-1.0/60.0, 3.0/20.0,-3.0/4.0, 0.0, 3.0/4.0,-3.0/20.0, 1.0/60.0};
+__device__ double coefficient_centrada[11] ={-7.93650794e-04,  9.92063492e-03, -5.95238095e-02,  2.38095238e-01,
+  -8.33333333e-01,  0.00000000e+00,  8.33333333e-01, -2.38095238e-01,
+   5.95238095e-02, -9.92063492e-03,  7.93650794e-04,
+};
 __device__ double coefficient_atrasada[5] = {25.0/12.0 ,-4.0, 3.0, -4.0/3.0 ,1.0/3.0};
 
 __device__ double b_i[4] = {1.0/6.0 , 1.0/3.0 , 1.0/3.0 , 1.0/6.0};
@@ -2533,7 +2537,7 @@ cudaDeviceSynchronize();
 
 cudaDeviceSynchronize();
 
-for (int t = 0 ; t < 1   ; t++ ){
+for (int t = 0 ; t < 10   ; t++ ){
 
 
 /////Quamtum field////
