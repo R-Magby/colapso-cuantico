@@ -1,0 +1,55 @@
+// Constant
+#define PI 3.1415
+
+// Derivate
+
+#define order 10
+__device__ double coef_centrada[order] = {};
+
+// Parameter Classic
+#define Nr 500
+#define dr 0.25
+
+// Parameter quatum
+#define Nk 20
+#define Nl 20
+#define dk PI/15.0
+
+// Evolution
+#define Nt 10
+#define dt dr/4.0
+
+
+__device__ void evo_metrics(Relativity_G metrics,Relativity_G metrics_dot, double *rho, double *ja, double *SA, double*SB,
+                            double Cosm, int id, double dr){
+
+  double radio;
+  if(id==0){radio=dr;}
+  else{radio=id*dr;}
+
+  
+  metrics_dot.A[id] = -2.0*metrics.alpha[id]*metrics.A[id]*(metrics.K[id] - 2.0*metrics.Kb[id]);
+  metrics_dot.B[id] = -2.0*metrics.alpha[id]*metrics.B[id]*metrics.Kb[id];
+  metrics_dot.alpha[id] = -2.0*metrics.alpha[id]*metrics.K[id];
+
+  metrics_dot.Da[id] = -2.0*derivate(metrics.K, id, 0);
+  metrics_dot.Db[id] = -2.0*(derivate(metrics.alpha, id, 0)*metrics.Kb[id] + metrics.alpha[id]*derivate(metrics.Kb, id,0) ); 
+
+double temp;
+temp = (metrics.U[id] + 4.0*metrics.lambda[id]*metrics.B[id]/metrics.A[id] );
+  metrics_dot.K[id] = metrics.alpha[id]* (power(metrics.K[id],2) - 4.0*metrics.K[id]*metrics.Kb[id] + 6.0*power(metrics.Kb[id],2))
+                      - metrics.alpha[id]/metrics.A[id] * (derivate(metrics.Da,id,1) + power(metrics.Da[id],2) + 2.0*metrics.Da[id]/radio
+                                                            - 0.5*metrics.Da[id]* temp )
+                      + 0.5*metrics.alpha[id] * (rho[id] + SA[id] + 2.0*SB[id] - 2.0*Cosm);
+  metrics_dot.Kb[id] = metrics.alpha[id]/metrics.A[id] * ( 1.0/radio * (0.5*temp - metrics.Db[id] - metrics.lambda[id] - metrics.Da[id] ) 
+                                                          + (-0.5*metrics.Da[id]*metrics.Db[id] - 0.5*derivate(metrics.Db,id,1) + 
+                                                          + 0.25*metrics.Db[id]* temp + metrics.A[id]*metrics.K[id]*metrics.Kb[id]))
+                      + 0.5*metrics.alpha[id] * (SA[id] - rho[id] - 2.0*Cosm);
+
+  metrics_dot.U[id] = -2.0*metrics.alpha[id] * (derivate( metrics.K,id,0) + metrics.Da[id]* ( metrics.Kid ))
+}
+
+
+
+
+
