@@ -19,6 +19,17 @@ __device__ double coef_centrada[order] = {};
 #define Nt 10
 #define dt dr/4.0
 
+__device__ double psi_dot(){
+  double temp;
+  temp = metrics.alpha[id]
+
+}
+__device__ double f_pi_dot(fields_classic field_C, Relativity_G metrics, int id,double radio){
+  double temp;
+  temp = metrics.alpha[j]*metrics.B[j] * radio*radio * field_C.psi[j]/sqrt(metrics.A[j]) ;
+
+  return temp/(radio*radio);
+}
 
 __device__ void evo_metrics(Relativity_G metrics,Relativity_G metrics_dot, double *rho, double *ja, double *SA, double*SB,
                             double Cosm, int id, double dr){
@@ -46,8 +57,39 @@ temp = (metrics.U[id] + 4.0*metrics.lambda[id]*metrics.B[id]/metrics.A[id] );
                                                           + 0.25*metrics.Db[id]* temp + metrics.A[id]*metrics.K[id]*metrics.Kb[id]))
                       + 0.5*metrics.alpha[id] * (SA[id] - rho[id] - 2.0*Cosm);
 
-  metrics_dot.U[id] = -2.0*metrics.alpha[id] * (derivate( metrics.K,id,0) + metrics.Da[id]* ( metrics.Kid ))
+
+metrics_dot.U[id] = -2.0*metrics.alpha[id] * (derivate( metrics.K,id,0) + metrics.Da[id]* ( metrics.K[id] - 4.0*mertics.Kb[id] ) 
+                                                - 2.0* ( metrics.K[id] - 3.0*metrics.Kb[id] ) * ( metrics.Db[id] - 2.0*metrics.lambda[id]*metrics.B[id]/metrics.A[id] ))
+                      -4.0*metrics.alpha[id] * ja[id];
+
+  temp = 2.0*metrics.alpha[id]*metrics.A[id]/metrics.B[id];
+  metrics_dot.lambda[id] = temp * ( derivate(metrics.Kb, id, 0) - 0.5*metrics.Db[id] * ( metrics.K[id] - 3.0*metrics.Kb[id] ) + 0.5*ja[id] );
+
 }
+
+__device__ void evo_clasic_fields(fields_classic field_C, fields_classic field_C_dot, Relativity_G metrics, int id, double dr){
+
+  double radio,temp;
+  if(id==0){radio=dr;}
+  else{radio=id*dr;}
+  
+  temp = metrics.alpha[id]/(sqrt(metrics.A[id])*metrics.B[id]);
+  
+  field_C_dot.phi[id] = temp*field_C.pi[id];
+  field_C_dot.psi[id] = psi_dot(field_C,metrics,id,0);
+  field_C_dot.pi[id] =  f_pi_dot(field_C,metrics,radio,id);  
+}
+
+//cambiar metrics por relativity
+__device__ void RK_implicit_tenth(metrics K1m,metrics K2m, metrics K3m, metrics K4m, metrics K5m, Relativity_G y_tilde_M,
+                                  fields_classics K1c, fields_classics K2c, fields_classics K3c, fields_classics K4c, fields_classics K5c, fields_classics y_tilda_C,
+                                  fields_quantum K1q, fields_quantum K2q, fields_quantum K3q, fields_quantum K4q, fields_quantum K5q, fields_quantum y_tilda_Q ){
+
+
+
+}
+
+    
 
 
 
