@@ -88,9 +88,24 @@ __device__ void RK_implicit_tenth(metrics K1m,metrics K2m, metrics K3m, metrics 
 
 
 }
-
+__global__ void y_tilda_metrics( Relativity_G metrics , metrics K1m,metrics K2m, metrics K3m, metrics K4m, metrics K5m, Relativity_G y_tilde_M, double dr, int Nr){
+  int id = ;
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+  y_tilda_M.A[id] = metrics.A[id] + dt*( b[0]*metrics_K1.A[id] + b[1]*metrics_K2.A[id] + b[2]*metrics_K3.A[id] + b[3]*metrics_K4 + b[4]*metrics_K5.A[id] );
+}
     
+__global__ void y_tilda_field_classic(fields_classics field_Q, fields_classics K1c, fields_classics K2c, fields_classics K3c, fields_classics K4c, fields_classics K5c, fields_classics y_tilda_C, double dr, int Nr){
 
+  
+}
 
 
 
