@@ -512,7 +512,7 @@ __global__ void y_tilda_field_classic(field_Classic field_C, field_Classic FC_K1
 }
 __global__ void y_tilda_field_quantum(field_Quantum field_Q, field_Quantum FQ_K1, field_Quantum FQ_K2, field_Quantum FQ_K3, field_Quantum FQ_K4, field_Quantum FQ_K5, field_Quantum y_tilda_Q, int s, int g){
 
-    int id =  g*dim_q+ threadIdx.x + blockDim.x*blockIdx.x;
+    int id =  g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
     y_tilda_Q.real.u[id] = field_Q.real.u[id]     + dt*( a_ij[s][0]* FQ_K1.real.u[id]     + a_ij[s][1]* FQ_K2.real.u[id]    + a_ij[s][2]* FQ_K3.real.u[id]    + a_ij[s][3]* FQ_K4.real.u[id]    + a_ij[s][4]* FQ_K5.real.u[id]);
     y_tilda_Q.real.pi[id]  = field_Q.real.pi[id]  + dt*( a_ij[s][0]* FQ_K1.real.pi[id]    + a_ij[s][1]* FQ_K2.real.pi[id]   + a_ij[s][2]* FQ_K3.real.pi[id]   + a_ij[s][3]* FQ_K4.real.pi[id]   + a_ij[s][4]* FQ_K5.real.pi[id]);
     y_tilda_Q.real.psi[id] = field_Q.real.psi[id] + dt*( a_ij[s][0]* FQ_K1.real.psi[id]   + a_ij[s][1]* FQ_K2.real.psi[id]  + a_ij[s][2]* FQ_K3.real.psi[id]  + a_ij[s][3]* FQ_K4.real.psi[id]  + a_ij[s][4]* FQ_K5.real.psi[id]);
@@ -611,6 +611,59 @@ void cargar_coeficcientes(double *a_ij,double *b_i, double *c_i){
         exit(1);
     fread( c_i , sizeof(double) , 5 , arch );
     fclose(arch);
+}
+
+//C.I
+__globa__ void u_initial(field_Quantum field_Q, int k, int l, int field, int Nr,double dr, double dk , double mass){
+    int r = threadIdx.x + blockDim.x*blockIdx.x;
+    int id_u= field + l*Nk*Nr + k*Nr ;
+    double omega = sqrt( dk*(k+1)*dk*(k+1) + mass*mass ) ;
+
+        //Hay un problema en r=0, debido a que u = 0/0, por lo que indetermina, por lo que, se eligio escoger una aproximacion asintotica.
+
+        //Aproximacion a kr << 1, considerando dr=0.025 y dk=pi/15 ~ 0.2, entonces para que recien k*r tenga un valor igual a 1 
+        // considerando dk*dr*i (k=1), entonces i debria ser 200 aproximadamente, ahora considerando k=Nk (por ahora Nk =20),
+        // dk*21 ~ 4.2, por lo tanto para que dr*i baje este valor y usar una condicion asintotica  podemos considerar  un margen
+        // de que kr<0.1 para que se cumpla, entonces dr*i < 0.1/4.2 ~ 0.025, entonces para que sea aceptable i debe ser 1
+        // podemos elegir ahora nuestro rango de r para que cumpla la condicion asintotica, la cual se eligira  entre [0,10].
+
+        // Nota: la aproximacion dependera de k, para frecuencias altas la condicion inicial en r pequeños no sera del todo precisa
+        // lo cual dejará abierta la posibilidad de modificar esta seccion para que dependa de un rango apropiado de k tambien.
+        if (r == 0 ){
+          if(2*l+1 < GSL_SF_DOUBLEFACT_NMAX){
+        //if(l==0){
+                field_Q.real.u[id_u + r] = (dk*(k+1)/sqrt(consta_pi * omega)) *pow(dk*(k+1),l)/gsl_sf_doublefact(2*l+1) ;
+                field_Q.imag.u[id_u + r] = 0.0;
+                
+                field_Q.real.pi[id_u + r] = 0.0 ;
+                field_Q.imag.pi[id_u + r] = -omega*(dk*(k+1)/sqrt(consta_pi * omega)) *pow(dk*(k+1),l)/gsl_sf_doublefact(2*l+1);
+                
+                field_Q.real.psi[id_u + r] = (pow(dk*(k+1),l+3)/sqrt(consta_pi * omega)) * (-1)*(dr*r) /gsl_sf_doublefact(2*l+3);
+                field_Q.imag.psi[id_u + r] = 0.0;
+          }
+          else{
+                field_Q.real.u[id_u + r] = 0.0;
+                field_Q.imag.u[id_u + r] = 0.0;
+                
+                field_Q.real.pi[id_u + r] = 0.0 ;
+                field_Q.imag.pi[id_u + r] = 0.0;
+                
+                field_Q.real.psi[id_u + r] = 0.0;
+                field_Q.imag.psi[id_u + r] = 0.0;
+          }
+            //u[id_u + r].x=0.0;
+        }
+        else{
+                field_Q.real.u[id_u + r] = (dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*r) / pow(dr*r,l) ;
+                field_Q.imag.u[id_u + r] = 0.0;
+                
+                field_Q.real.pi[id_u + r] = 0.0 ;
+                field_Q.imag.pi[id_u + r] = -omega*(dk*(k+1)/sqrt(consta_pi * omega)) * gsl_sf_bessel_jl(l,dk*(k+1)*dr*r) / pow(dr*r,l);
+                
+                field_Q.real.psi[id_u + r] = ( pow(dk*(k+1),2) /sqrt(consta_pi * omega)) * (-1) * gsl_sf_bessel_jl( l +1, dk*(k+1)*dr*(r)  )/ (pow(dr*r,l));
+                field_Q.imag.psi[id_u + r] = 0.0;
+        }
+    
 }
 
 int main() {
