@@ -613,6 +613,120 @@ void cargar_coeficcientes(double *a_ij,double *b_i, double *c_i){
     fclose(arch);
 }
 
+//Metric fields...
+__device__ double initial_phi(double radio){
+  return amplitude*exp(- pow(radio/width,2));
+}
+
+__device__ double initial_psi(double radio){
+  return -2.0* radio/pow(width,2) *amplitude*exp(- pow(radio/width,2));
+}
+__global__ void metric_initial(double *phi, double *psi, double *PI, double *A, double *B, double *alpha, double *Da,
+                                double *Db, double *K, double *Kb, double *lambda, double *U, double *cosmological_constant,
+                                int Nr, double dr){
+  int idx = threadIdx.x + blockDim.x*blockIdx.x;
+  double r;
+  if(idx<Nr){
+    r = idx*dr;
+    //Initial matters fields
+    phi[idx] = initial_phi(r);
+    psi[idx] = initial_psi(r);
+    PI[idx] = 0.0; // Si se escoge otro valor para pi, se tiene que rescalar con *sqrt(A), debido que A no vale 1 en todo el espacio.
+    ///Initial metrics fields
+    A[idx]=1.0; //Valor provisorio para A, con el fin de tener A=1.0 en el origen y poder calcular la constante cosmologica, usando A_RK calculo nuevamente A
+    B[idx]=1.0;
+    alpha[idx]=1.0;
+    Da[idx]=0.0;
+    Db[idx]=0.0;
+    K[idx]=0.0;
+    Kb[idx]=0.0;
+  }
+}
+
+__device__ double initial_A(double A, int i, double r, double cosmological_constant, int s, double dr, int Nr){
+  double dr_psi, sol;
+  double rs;
+
+  if (i < (int)(order-1)/2){
+    for (int m=0; m < half_order_right + i ; m++){
+      rs= r + dr*m;
+      dr_psi += coefficient_centrada[m + (int)(order-1)/2 -i ]*initial_psi(rs);
+      }
+    for (int m=(int)(order-1)/2 - i; m > 0 ; m--){
+      rs= r + dr*m;
+      dr_psi += -1.0*coefficient_centrada[ (int)(order-1)/2 - i - m  ]*initial_psi(rs);
+      } 
+  }
+  else if (i > Nr-(int)(order-1)/2-1){
+    
+    for (int m=-order+1;m<1;m++){
+      rs= r + dr*m;
+      dr_psi += coefficient_atrasada[-m]*initial_psi(rs);
+    }
+  }
+  else{
+    for (int m=0;m<order;m++){
+      rs= r + dr*(m-(int)(order-1)/2);
+      dr_psi += coefficient_centrada[m]*initial_psi(rs);
+    }
+  }
+  dr_psi /= dr;
+  if(i==0){
+    sol = A*(  r*pow(dr_psi,2)*0.5 + r*A*cosmological_constant);
+  }
+  else{
+    sol = A*( (1.0-A)/r + r*pow(dr_psi,2)*0.5 + r*A*cosmological_constant);
+  }
+
+  return sol;
+}
+__global__ void A_RK(double *A, double *cosmological_constant, int Nr,double dr){
+  
+  double K1,K2,K3,K4;
+  double radio;
+
+  A[0]=1.0;
+
+  for (int i=0; i<Nr-1 ; i++){
+    radio = i*dr;
+
+    K1 = initial_A(A[i] , i, radio, cosmological_constant[0],0,dr, Nr);
+    
+    K2 = initial_A(A[i] + dr*a_ij[1]*K1, i, radio + c_i[1]*dr, cosmological_constant[0],1,dr, Nr);
+
+    K3 = initial_A(A[i] + dr*a_ij[2]*K2, i, radio + c_i[2]*dr, cosmological_constant[0],2,dr, Nr);
+
+    K4 = initial_A(A[i] + dr*a_ij[3]*K3, i, radio + c_i[3]*dr, cosmological_constant[0],3,dr, Nr);
+
+  A[i+1]=A[i] + dr*(b_i[0]*K1 +b_i[1]*K2 +b_i[2]*K3 +b_i[3]*K4);
+    printf("A[%d] = %.10f\n",i,A[i]);
+  }
+}
+__global__ void initial_lambda(double *lambda, double *A, double *B, double dr, int Nr){
+  int idx = threadIdx.x + blockDim.x*blockIdx.x;
+  double radio;
+
+  if(idx<Nr){
+    radio = idx*dr;
+    if(idx==0){
+      lambda[0]=0.0;
+    }
+    else{
+      lambda[idx] = (1.0 - A[idx]/B[idx])/radio;
+    }
+  }
+}
+__global__ void initial_U(double *U,double *lambda, double *A, double dr, int Nr){
+  int idx = threadIdx.x + blockDim.x*blockIdx.x;
+  double radio;
+  double drA;
+  if(idx<Nr){
+    radio = idx*dr;
+    drA = derivate(A,dr,Nr,idx,0);
+      U[idx] = (drA - 4.0*lambda[idx])/A[idx];
+      printf("U[%d] = %.10f\n",idx,U[idx]);
+  }
+}
 //C.I
 __globa__ void u_initial(field_Quantum field_Q, int k, int l, int field, int Nr,double dr, double dk , double mass){
     int r = threadIdx.x + blockDim.x*blockIdx.x;
