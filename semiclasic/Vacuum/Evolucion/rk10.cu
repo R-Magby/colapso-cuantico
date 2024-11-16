@@ -19,7 +19,7 @@
 // para el caso de |u_tilda |^2/r^2, u_tilda, que al final sonesfericos de bessel, deberia ser en l distinto de cero, deberia ser cero por el * r^l,
 // en l = 0 deberia ser no nulo, pero por ejemplo en la integral de phi_theta viene multiplicado por l, por lo que esa contribucion se anula.
 
-
+//Nota: ultimo problema : el ja, tratar de que sea nulo en el espacio, es cero en r=0
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
@@ -48,25 +48,26 @@ __device__ double coefficient_centrada[11] ={-7.93650794e-04,  9.92063492e-03, -
 // Parameter
 #define Nr 500
 #define dr 0.025
-#define Nt 10
+#define Nt 100
 #define dt dr/4.0
 
 //Parameter classic
 #define amplitude 0.0
 #define width 1.5
 // Parameter quantum
-#define Nk 20
-#define Nl 20
+#define Nk 5
+#define Nl 5
 #define dk consta_pi/15.0
 
 #define  dim_q Nk*Nl*Nr
 
+#define ct 0.0
 //Runge-Kutta tenth order implicit
 #define step 5
 
-__device__ double a_ij[5][5];
-__device__ double b_i[5];
-__device__ double c_i[5];
+__constant__  double a_ij[5][5];
+__constant__  double b_i[5];
+__constant__  double c_i[5];
 
 
 struct Relativity_G{
@@ -270,8 +271,9 @@ __device__ double derivate( double *f, int id_nodo, int idx, int symmetric ){
       return temp;
 }
 __global__ void cost_cosm_value(double *rho,double *cosmological_constant){
-  //cosmological_constant[0] = 1.0/pow(2.0*consta_pi,2)*log(pow(3.0,9)/pow(2.0,16))/8.0;
+  //cosmological_constant[0] = pow(2.0,4)/pow(2.0*consta_pi,2)*log(pow(3.0,9)/pow(2.0,16))/8.0;
   cosmological_constant[0] = -rho[0];
+
     printf("Constante cosmologica : %.15f \n", cosmological_constant[0]);
   
 }
@@ -290,7 +292,7 @@ __global__ void Tensor_tt(double * T_tt,double * T_rr,double * T_tr,double * T_0
   }
 }
 
-__global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, double *SB, Relativity_G metrics, field_Classic field_C, field_Quantum field_Q, int g){
+__global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, double *SB, Relativity_G metrics, field_Classic field_C, field_Quantum field_Q, int g, int siono){
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     int id;
     int cinetica;
@@ -413,8 +415,8 @@ __global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, doub
         SA[idx] +=      cinetica*(1.0/(2.0*metrics.A[idx]) * (xpi2x/(metrics.B[idx]*metrics.B[idx]) + xpsi2x) - 1.0/(metrics.B[idx]*radio*radio)*xtheta2x );
     
         SB[idx] +=      cinetica*(1.0/(2.0*metrics.A[idx]) * (xpi2x/(metrics.B[idx]*metrics.B[idx]) - xpsi2x) );
-        /*if(idx==1 ){
-          printf("Stress_Energy en  idx : %d:\n",idx); 
+        if(idx==0 && siono==0 && g==5){
+          printf("Stress_Energy en  idx : %d of g : %d:\n",idx,g); 
     
             printf(" <x|PI|x>^2 = %1.5f\n",xpi2x);
             printf(" <x|psi|x>^2 = %1.5f\n",xpsi2x);
@@ -432,7 +434,7 @@ __global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, doub
             printf("SB : %.15f\n",SB[idx]);
         
         
-          }*/
+          }
     }
 }
   
@@ -480,7 +482,9 @@ __global__ void evo_metrics(Relativity_G metrics,Relativity_G metrics_RK, double
       }
 
       metrics_RK.K[id] =  metrics.alpha[id]* f1 - metrics.alpha[id]/metrics.A[id] * f2 + 0.5*metrics.alpha[id] * f3;
-
+      if(id==0){
+        //printf("K : %.15f | f1 : %.15f | f2 : %.15f | f3 : %.15f\n", metrics_RK.K[id],f1,f2,f3);
+      }
       //Kb
       //Solamente derivaremos las funciones que son impares, ya que las demas actuan como constantes en r = 0,
       if(id==0){
@@ -493,7 +497,11 @@ __global__ void evo_metrics(Relativity_G metrics,Relativity_G metrics_RK, double
       f3=(SA[id] - rho[id] - 2.0*Cosm[0]);
 
       metrics_RK.Kb[id] = metrics.alpha[id]/metrics.A[id] * (  f1 + f2  )+ 0.5*metrics.alpha[id] * f3;
+      if(id==0){
+        //printf("Kb : %.15f | f1 : %.15f | f2 : %.15f | f3 : %.15f\n", metrics_RK.Kb[id],f1,f2,f3);
+        //printf("dU : %.15f | dlambda : %.15f | dDb : %.15f | dDa : %.15f\n", derivate( metrics.U,0,id,1),derivate(metrics.lambda,0,id,1),derivate(metrics.Db,0,id,1),derivate(metrics.Da,0,id,1));
 
+      }
       //                                                ********Regularacion********
 
       metrics_RK.U[id] = -2.0*metrics.alpha[id] * (derivate( metrics.K,0,id,0) + metrics.Da[id]* ( metrics.K[id] - 4.0*metrics.Kb[id] ) 
@@ -502,6 +510,42 @@ __global__ void evo_metrics(Relativity_G metrics,Relativity_G metrics_RK, double
 
       temp = 2.0*metrics.alpha[id]*metrics.A[id]/metrics.B[id];
       metrics_RK.lambda[id] = temp * ( derivate(metrics.Kb,0, id, 0) - 0.5*metrics.Db[id] * ( metrics.K[id] - 3.0*metrics.Kb[id] ) + 0.5*ja[id] );
+      /*if(id==  0 ){  
+        printf("A : %.15f\n",metrics.A[id]);
+        printf("B : %.15f\n",metrics.B[id]);
+        printf("alpha : %.15f\n",metrics.alpha[id]);
+        printf("Da : %.15f\n", metrics.Da[id]);
+        printf("K past: %.15f\n",metrics.K[id-1]);
+        printf("K %.15f\n",metrics.K[id]);
+        printf("K last: %.15f\n",metrics.K[id+1]);
+
+        printf("Kb past : %.15f\n",metrics.Kb[id-1]);
+        printf("Kb : %.15f\n",metrics.Kb[id]);
+        printf("Kb last : %.15f\n",metrics.Kb[id+1]);
+
+        printf("K-3kb : %.15f\n",metrics.K[id] - 3.0*metrics.Kb[id]);
+        printf("K-3kb +1: %.15f\n",metrics.K[id+1] - 3.0*metrics.Kb[id+1]);
+        printf("K-3kb +2: %.15f\n",metrics.K[id+2] - 3.0*metrics.Kb[id+2]);
+
+        printf("Db : %.15f\n", metrics.Db[id]);
+        printf("Db ´1: %.15f\n", metrics.Db[id+1]);
+        printf("Db ´+2: %.15f\n", metrics.Db[id+2]);
+
+        printf("dKb : %.15f\n",derivate(metrics.Kb,0, id, 0));
+        printf("dKb +1: %.15f\n",derivate(metrics.Kb,0, id+1, 0));
+        printf("dKb +2: %.15f\n",derivate(metrics.Kb,0, id+2, 0));
+
+        printf("lambda : %.15f\n",metrics.lambda[id]);
+        printf("U : %.15f\n",metrics_RK.U[id]);
+        printf("lambda +1 : %.15f\n",metrics.lambda[id+1]);
+        printf("U +1 : %.15f\n",metrics_RK.U[id+1]);
+        printf("lambda +2 : %.15f\n",metrics.lambda[id+2]);
+        printf("U +2: %.15f\n",metrics_RK.U[id+2]);
+        printf("ja: %.15f\n",ja[id]);
+        printf("ja +1: %.15f\n",ja[id+1]);
+        printf("ja +2: %.15f\n",ja[id+2]);
+
+      }*/
     }
 }
 __global__ void evo_fields_classics(field_Classic field_C, field_Classic field_C_RK, Relativity_G metrics){
@@ -525,12 +569,13 @@ __global__ void evo_fields_classics(field_Classic field_C, field_Classic field_C
       }
   }
 }
-__global__ void evo_fields_quantums(  field_Quantum field_Q, field_Quantum field_Q_RK, Relativity_G metrics,  int g){
+__global__ void evo_fields_quantums(  field_Quantum field_Q, field_Quantum field_Q_RK, Relativity_G metrics,  int g, int s){
     int id = g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
-    int r = id%Nr;
-    int k = (int)id/Nr%Nk;
-    int l = (int)id/Nr/Nl;
-    int id_nodo =g*dim_q +l*Nr*Nk + k*Nr;
+    int id_nodo = threadIdx.x + blockDim.x*blockIdx.x;;
+    int r = id_nodo%Nr;
+    int k = (int)id_nodo/Nr%Nk;
+    int l = (int)id_nodo/Nr/Nl;
+    int id_nodo_ghost =g*dim_q +l*Nr*Nk + k*Nr;
     double temp[2];
     double A_B_alpha_prime;
     double mass;
@@ -541,21 +586,21 @@ __global__ void evo_fields_quantums(  field_Quantum field_Q, field_Quantum field
       mass=1.0;
     }
     else if(g==2 || g==4){
-      mass=sqrt(3.0);
+      mass=1*sqrt(3.0);
     }
     else if(g==5){
-      mass=sqrt(4.0);
+      mass=1*sqrt(4.0);
     }
-    if(id<dim_q){
+    if(id < 6*dim_q){
 
       field_Q_RK.real.u[id] = metrics.alpha[r]/(sqrt(metrics.A[r])*metrics.B[r]) * field_Q.real.pi[id];
       field_Q_RK.imag.u[id] = metrics.alpha[r]/(sqrt(metrics.A[r])*metrics.B[r]) * field_Q.imag.pi[id];
 
-      temp[0] = psi_dot(metrics, field_Q.real.pi, id_nodo ,r);
-      temp[1] = psi_dot(metrics, field_Q.imag.pi, id_nodo ,r);
+      temp[0] = psi_dot(metrics, field_Q.real.pi, id_nodo_ghost ,r);
+      temp[1] = psi_dot(metrics, field_Q.imag.pi, id_nodo_ghost ,r);
 
       field_Q_RK.real.psi[id] = temp[0];
-      field_Q_RK.real.psi[id] = temp[1];
+      field_Q_RK.imag.psi[id] = temp[1];
 
       double f1, f2, f3, f4, radio;
       if (r==0){
@@ -567,37 +612,49 @@ __global__ void evo_fields_quantums(  field_Quantum field_Q, field_Quantum field
       A_B_alpha_prime = derivate_metric(metrics, r);
       //pi real
       if(r==0){
-          f1 = (l+1) * ( field_Q.imag.psi[id]); // cero
-          f2 = (2*l+3) * derivate(field_Q.real.psi,id_nodo,r,1);
+          f1 = (l+1) * ( field_Q.real.psi[id]); // cero debido a A_B_alpha_prime
+          f2 = (2*l+3) * derivate(field_Q.real.psi,id_nodo_ghost,r,1);
           f3 = l*(l+1) * derivate(metrics.lambda, 0, r,1)*field_Q.real.u[id];
       }
       else{
           f1 = l/radio * (field_Q.real.u[id]) + (field_Q.real.psi[id]);
-          f2 = (2*l+2)/radio * field_Q.real.psi[id] + derivate(field_Q.real.psi,id_nodo,r,1);
+          f2 = (2*l+2)/radio * field_Q.real.psi[id] + derivate(field_Q.real.psi,id_nodo_ghost,r,1);
           f3 = l*(l+1)/radio * metrics.lambda[r]*field_Q.real.u[id];
       }
-      f4 = mass * mass* field_Q.real.u[id]* field_Q.real.u[id];
-      //if (id==3){
-      //  printf("g: %d | f1:%.15f | f2 : %.15f | f3 : %.15f\n",g,f1,f2,f3);
+      f4 = mass * mass* field_Q.real.u[id];//* field_Q.real.u[id];
+      if (id==0*dim_q+3){
+        //printf("id : %d | r: %d | k: %d | l: %d | id_nodo : %d | id_nodo_g : %d\n",id,r,k,l,id_nodo,id_nodo_ghost);
+        //printf("s: %d | g: %d | u: %.15f | psi: %.15f | pi: %.15f | f1:%.15f | f2 : %.15f | f3: %.15f\n",s,g,field_Q.real.u[id],field_Q.real.psi[id] , (field_Q.real.pi[id]),f1,f2,f3);
+        //printf("s: %d | g: %d | arg: %.15f | u: %.15f | lambda: %.15f |\n",s,g,l*(l+1)/radio,field_Q.real.u[id] , (metrics.lambda[r]));
 
-      //}
-      field_Q_RK.real.pi[id] = A_B_alpha_prime*f1 +  metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*(f2 +f3) - metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*f4;
-
+      }
+      //Nota : averiguar si f3 tiene un menos o no.
+      field_Q_RK.real.pi[id] = A_B_alpha_prime*f1 +  metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*(f2 - f3) - metrics.alpha[r]*metrics.B[r]*(sqrt(metrics.A[r]))*f4;
+      if (id==0*dim_q+3){
+        //printf("s: %d | g: %d |  pi_dot: %.15f | psi_ddr : %.15f  |\n",s,g,field_Q_RK.real.pi[id],derivate(field_Q.real.psi,id_nodo_ghost,r,1));
+      }
       //pi imaginario
       if(r==0){
           f1 = (l+1) * ( field_Q.imag.psi[id]); // cero
-          f2 = (2*l+3) *  derivate(field_Q.imag.psi,id_nodo,r,1);
+          f2 = (2*l+3) *  derivate(field_Q.imag.psi,id_nodo_ghost,r,1);
           f3 = l*(l+1) * derivate(metrics.lambda, 0, r,1)*field_Q.imag.u[id];
       }
       else{
 
           f1 = l/radio * (field_Q.imag.u[id]) + (field_Q.imag.psi[id]);
-          f2 = (2*l+2)/radio * field_Q.imag.psi[id] + derivate(field_Q.imag.psi,id_nodo,r,1);
+          f2 = (2*l+2)/radio * field_Q.imag.psi[id] + derivate(field_Q.imag.psi,id_nodo_ghost,r,1);
           f3 = l*(l+1)/radio * metrics.lambda[r]*field_Q.imag.u[id];
       }
-      f4 = mass * mass* field_Q.imag.u[id]* field_Q.imag.u[id];
+      f4 = mass * mass* field_Q.imag.u[id];//* field_Q.imag.u[id];
 
-      field_Q_RK.imag.pi[id] = A_B_alpha_prime*f1 +  metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*(f2 +f3) - metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*f4;
+      field_Q_RK.imag.pi[id] = A_B_alpha_prime*f1 +  metrics.alpha[r]*metrics.B[r]/(sqrt(metrics.A[r]))*(f2 - f3) - metrics.alpha[r]*metrics.B[r]*(sqrt(metrics.A[r]))*f4;
+      if (id==0*dim_q+3){
+        //printf("id : %d | r: %d | k: %d | l: %d | id_nodo : %d | id_nodo_g : %d\n",id,r,k,l,id_nodo,id_nodo_ghost);
+        //printf("s: %d | g: %d | u: %.15f | psi: %.15f | pi: %.15f | f1:%.15f | f2 : %.15f | f3: %.15f\n",s,g,field_Q.imag.u[id],field_Q.imag.psi[id] , (field_Q.imag.pi[id]),f1,f2,f3);
+        //printf("s: %d | g: %d | arg: %.15f | u: %.15f | lambda: %.15f |\n",s,g,l*(l+1)/radio,field_Q.imag.u[id] , (metrics.lambda[r]));
+
+        //printf("s: %d | g: %d |  pi_dot: %.15f | psi_ddr : %.15f  |\n",s,g,field_Q_RK.imag.pi[id],derivate(field_Q.imag.psi,id_nodo_ghost,r,1));
+      }
   }
 }
 __global__ void y_tilde_metrics( Relativity_G metrics , Relativity_G RG_K1, Relativity_G RG_K2,  Relativity_G RG_K3, Relativity_G RG_K4, Relativity_G RG_K5, Relativity_G y_tilde_M, int s){
@@ -606,15 +663,25 @@ __global__ void y_tilde_metrics( Relativity_G metrics , Relativity_G RG_K1, Rela
       y_tilde_M.A[id]      = metrics.A[id]        + dt*( a_ij[s][0]*RG_K1.A[id]      + a_ij[s][1]*RG_K2.A[id]      + a_ij[s][2]*RG_K3.A[id]      + a_ij[s][3]*RG_K4.A[id]      + a_ij[s][4]*RG_K5.A[id] );
       y_tilde_M.B[id]      = metrics.B[id]        + dt*( a_ij[s][0]*RG_K1.B[id]      + a_ij[s][1]*RG_K2.B[id]      + a_ij[s][2]*RG_K3.B[id]      + a_ij[s][3]*RG_K4.B[id]      + a_ij[s][4]*RG_K5.B[id] );
       y_tilde_M.alpha[id]  = metrics.alpha[id]    + dt*( a_ij[s][0]*RG_K1.alpha[id]  + a_ij[s][1]*RG_K2.alpha[id]  + a_ij[s][2]*RG_K3.alpha[id]  + a_ij[s][3]*RG_K4.alpha[id]  + a_ij[s][4]*RG_K5.alpha[id] );
+      if(y_tilde_M.alpha[id] > 1.0){
+        y_tilde_M.alpha[id] = 1.0;
+      }
       y_tilde_M.Da[id]     = metrics.Da[id]       + dt*( a_ij[s][0]*RG_K1.Da[id]     + a_ij[s][1]*RG_K2.Da[id]     + a_ij[s][2]*RG_K3.Da[id]     + a_ij[s][3]*RG_K4.Da[id]     + a_ij[s][4]*RG_K5.Da[id] );
       y_tilde_M.Db[id]     = metrics.Db[id]       + dt*( a_ij[s][0]*RG_K1.Db[id]     + a_ij[s][1]*RG_K2.Db[id]     + a_ij[s][2]*RG_K3.Db[id]     + a_ij[s][3]*RG_K4.Db[id]     + a_ij[s][4]*RG_K5.Db[id] );
       y_tilde_M.Kb[id]     = metrics.Kb[id]       + dt*( a_ij[s][0]*RG_K1.Kb[id]     + a_ij[s][1]*RG_K2.Kb[id]     + a_ij[s][2]*RG_K3.Kb[id]     + a_ij[s][3]*RG_K4.Kb[id]     + a_ij[s][4]*RG_K5.Kb[id] );
       y_tilde_M.K[id]      = metrics.K[id]        + dt*( a_ij[s][0]*RG_K1.K[id]      + a_ij[s][1]*RG_K2.K[id]      + a_ij[s][2]*RG_K3.K[id]      + a_ij[s][3]*RG_K4.K[id]      + a_ij[s][4]*RG_K5.K[id] );
       y_tilde_M.lambda[id] = metrics.lambda[id]   + dt*( a_ij[s][0]*RG_K1.lambda[id] + a_ij[s][1]*RG_K2.lambda[id] + a_ij[s][2]*RG_K3.lambda[id] + a_ij[s][3]*RG_K4.lambda[id] + a_ij[s][4]*RG_K5.lambda[id] );
       y_tilde_M.U[id]      = metrics.U[id]        + dt*( a_ij[s][0]*RG_K1.U[id]      + a_ij[s][1]*RG_K2.U[id]      + a_ij[s][2]*RG_K3.U[id]      + a_ij[s][3]*RG_K4.U[id]      + a_ij[s][4]*RG_K5.U[id] );
+      
       //if(id==20){
       //  printf("A_tilda=%.15f\n",y_tilde_M.A[id]);
       //  }
+      if(id==0){
+        y_tilde_M.Da[id]=0.0;
+        y_tilde_M.Db[id]=0.0;
+        y_tilde_M.lambda[id]=0.0;
+        y_tilde_M.U[id]=0.0;
+      }
     }
 }
     
@@ -622,16 +689,19 @@ __global__ void y_tilde_field_classic(field_Classic field_C, field_Classic FC_K1
 
     int id = threadIdx.x + blockDim.x*blockIdx.x;
     if(id < Nr){
-      y_tilde_C.phi[id] = field_C.phi[id] + dt*( a_ij[s][0]* FC_K1.phi[id] + a_ij[s][1]* FC_K2.phi[id] + a_ij[s][2]* FC_K3.phi[id] + a_ij[s][3]* FC_K4.phi[id] + a_ij[s][4]* FC_K5.phi[id]);
-      y_tilde_C.pi[id]  = field_C.pi[id]  + dt*( a_ij[s][0]* FC_K1.pi[id] + a_ij[s][1]* FC_K2.pi[id] + a_ij[s][2]* FC_K3.pi[id] + a_ij[s][3]* FC_K4.pi[id] + a_ij[s][4]* FC_K5.pi[id]);
-      y_tilde_C.psi[id] = field_C.psi[id] + dt*( a_ij[s][0]* FC_K1.psi[id] + a_ij[s][1]* FC_K2.psi[id] + a_ij[s][2]* FC_K3.psi[id] + a_ij[s][3]* FC_K4.psi[id] + a_ij[s][4]* FC_K5.psi[id]);
+      y_tilde_C.phi[id] = field_C.phi[id] + dt*( a_ij[s][0]* FC_K1.phi[id]  + a_ij[s][1]* FC_K2.phi[id]   + a_ij[s][2]* FC_K3.phi[id]   + a_ij[s][3]* FC_K4.phi[id]   + a_ij[s][4]* FC_K5.phi[id]);
+      y_tilde_C.pi[id]  = field_C.pi[id]  + dt*( a_ij[s][0]* FC_K1.pi[id]   + a_ij[s][1]* FC_K2.pi[id]    + a_ij[s][2]* FC_K3.pi[id]    + a_ij[s][3]* FC_K4.pi[id]    + a_ij[s][4]* FC_K5.pi[id]);
+      y_tilde_C.psi[id] = field_C.psi[id] + dt*( a_ij[s][0]* FC_K1.psi[id]  + a_ij[s][1]* FC_K2.psi[id]   + a_ij[s][2]* FC_K3.psi[id]   + a_ij[s][3]* FC_K4.psi[id]   + a_ij[s][4]* FC_K5.psi[id]);
+      if(id==0){
+        y_tilde_C.psi[id]=0.0;
+      }
     }
   
 }
 __global__ void y_tilde_field_quantum(field_Quantum field_Q, field_Quantum FQ_K1, field_Quantum FQ_K2, field_Quantum FQ_K3, field_Quantum FQ_K4, field_Quantum FQ_K5, field_Quantum y_tilde_Q, int s, int g){
 
     int id =  g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
-    if(id<dim_q){
+    if(id < 6*dim_q){
       y_tilde_Q.real.u[id] = field_Q.real.u[id]     + dt*( a_ij[s][0]* FQ_K1.real.u[id]     + a_ij[s][1]* FQ_K2.real.u[id]    + a_ij[s][2]* FQ_K3.real.u[id]    + a_ij[s][3]* FQ_K4.real.u[id]    + a_ij[s][4]* FQ_K5.real.u[id]);
       y_tilde_Q.real.pi[id]  = field_Q.real.pi[id]  + dt*( a_ij[s][0]* FQ_K1.real.pi[id]    + a_ij[s][1]* FQ_K2.real.pi[id]   + a_ij[s][2]* FQ_K3.real.pi[id]   + a_ij[s][3]* FQ_K4.real.pi[id]   + a_ij[s][4]* FQ_K5.real.pi[id]);
       y_tilde_Q.real.psi[id] = field_Q.real.psi[id] + dt*( a_ij[s][0]* FQ_K1.real.psi[id]   + a_ij[s][1]* FQ_K2.real.psi[id]  + a_ij[s][2]* FQ_K3.real.psi[id]  + a_ij[s][3]* FQ_K4.real.psi[id]  + a_ij[s][4]* FQ_K5.real.psi[id]);
@@ -640,6 +710,10 @@ __global__ void y_tilde_field_quantum(field_Quantum field_Q, field_Quantum FQ_K1
       y_tilde_Q.imag.pi[id]  = field_Q.imag.pi[id]  + dt*( a_ij[s][0]* FQ_K1.imag.pi[id]    + a_ij[s][1]* FQ_K2.imag.pi[id]   + a_ij[s][2]* FQ_K3.imag.pi[id]   + a_ij[s][3]* FQ_K4.imag.pi[id]   + a_ij[s][4]* FQ_K5.imag.pi[id]);
       y_tilde_Q.imag.psi[id] = field_Q.imag.psi[id] + dt*( a_ij[s][0]* FQ_K1.imag.psi[id]   + a_ij[s][1]* FQ_K2.imag.psi[id]  + a_ij[s][2]* FQ_K3.imag.psi[id]  + a_ij[s][3]* FQ_K4.imag.psi[id]  + a_ij[s][4]* FQ_K5.imag.psi[id]);
     }
+      if(id==dim_q+3){
+        //printf("pi_tilda=%.15f | K1: %.15f | | K2: %.15f | | K3: %.15f | | K4: %.15f | | K5: %.15f |\n",y_tilde_Q.real.pi[id],FQ_K1.real.pi[id],FQ_K2.real.pi[id],FQ_K3.real.pi[id],FQ_K4.real.pi[id],FQ_K5.real.pi[id]);
+        //printf("a_i,1: %.15f | a_i,2: %.15f | a_i,3: %.15f | a_i,4: %.15f | a_i,5: %.15f |\n",a_ij[s][0],a_ij[s][1],a_ij[s][2],a_ij[s][3],a_ij[s][4])  ;
+      }
 }
 
 
@@ -667,7 +741,7 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
         //Calculo del tensor energia momentum en el tiempo n+1 
         T_zeros <<< grid_radial, bloque >>>(rho, ja, SA,SB);
         for (int g=0; g < 6; g++){
-            Tensor_energy_momentum <<< grid_quantum, bloque >>>(rho, ja, SA, SB, y_tilde_M, y_tilde_C, y_tilde_Q, g);
+            Tensor_energy_momentum <<< grid_quantum, bloque >>>(rho, ja, SA, SB, y_tilde_M, y_tilde_C, y_tilde_Q, g,1);
         }    
         cudaDeviceSynchronize();
 
@@ -676,35 +750,35 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K1, rho, ja, SA, SB, Cosm);
             evo_fields_classics <<< grid_radial, bloque >>>( y_tilde_C,  FC_K1,  y_tilde_M);
             for (int g=0; g < 6; g++){
-              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K1,  y_tilde_M,g);
+              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K1,  y_tilde_M,g,s);
             }
         }
         else if(s==1){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K2, rho, ja, SA, SB, Cosm);
             evo_fields_classics <<< grid_radial, bloque >>>( y_tilde_C,  FC_K2,  y_tilde_M);
             for (int g=0; g < 6; g++){
-              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K2,  y_tilde_M, g);
+              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K2,  y_tilde_M, g,s);
             }
         }
         else if(s==2){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K3, rho, ja, SA, SB, Cosm);
             evo_fields_classics <<< grid_radial, bloque >>>( y_tilde_C,  FC_K3,  y_tilde_M);
             for (int g=0; g < 6; g++){
-              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K3,  y_tilde_M, g);
+              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K3,  y_tilde_M, g,s);
             }
         }
         else if(s==3){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K4, rho, ja, SA, SB, Cosm);
             evo_fields_classics <<< grid_radial, bloque >>>( y_tilde_C,  FC_K4,  y_tilde_M);
             for (int g=0; g < 6; g++){
-              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K4,  y_tilde_M, g);
+              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K4,  y_tilde_M, g,s);
             }
         }
         else if(s==4){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K5, rho, ja, SA, SB, Cosm);
             evo_fields_classics <<< grid_radial, bloque >>>( y_tilde_C,  FC_K5,  y_tilde_M);
             for (int g=0; g < 6; g++){
-              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K5,  y_tilde_M, g);
+              evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K5,  y_tilde_M, g,s);
             }
         }
     }
@@ -717,15 +791,24 @@ __global__ void next_step_metric(   Relativity_G metrics,  Relativity_G RG_K1,Re
     metrics.A[id]      = metrics.A[id]        + dt*( b_i[0]*RG_K1.A[id]      + b_i[1]*RG_K2.A[id]      + b_i[2]*RG_K3.A[id]      + b_i[3]*RG_K4.A[id]      + b_i[4]*RG_K5.A[id] );
     metrics.B[id]      = metrics.B[id]        + dt*( b_i[0]*RG_K1.B[id]      + b_i[1]*RG_K2.B[id]      + b_i[2]*RG_K3.B[id]      + b_i[3]*RG_K4.B[id]      + b_i[4]*RG_K5.B[id] );
     metrics.alpha[id]  = metrics.alpha[id]    + dt*( b_i[0]*RG_K1.alpha[id]  + b_i[1]*RG_K2.alpha[id]  + b_i[2]*RG_K3.alpha[id]  + b_i[3]*RG_K4.alpha[id]  + b_i[4]*RG_K5.alpha[id] );
+    if(id==0){
+      printf("alpha=%.15f\n",metrics.alpha[id]);
+    }
+    if(metrics.alpha[id] > 1.0){
+      metrics.alpha[id] = 1.0;
+    }
     metrics.Da[id]     = metrics.Da[id]       + dt*( b_i[0]*RG_K1.Da[id]     + b_i[1]*RG_K2.Da[id]     + b_i[2]*RG_K3.Da[id]     + b_i[3]*RG_K4.Da[id]     + b_i[4]*RG_K5.Da[id] );
     metrics.Db[id]     = metrics.Db[id]       + dt*( b_i[0]*RG_K1.Db[id]     + b_i[1]*RG_K2.Db[id]     + b_i[2]*RG_K3.Db[id]     + b_i[3]*RG_K4.Db[id]     + b_i[4]*RG_K5.Db[id] );
     metrics.Kb[id]     = metrics.Kb[id]       + dt*( b_i[0]*RG_K1.Kb[id]     + b_i[1]*RG_K2.Kb[id]     + b_i[2]*RG_K3.Kb[id]     + b_i[3]*RG_K4.Kb[id]     + b_i[4]*RG_K5.Kb[id] );
     metrics.K[id]      = metrics.K[id]        + dt*( b_i[0]*RG_K1.K[id]      + b_i[1]*RG_K2.K[id]      + b_i[2]*RG_K3.K[id]      + b_i[3]*RG_K4.K[id]      + b_i[4]*RG_K5.K[id] );
     metrics.lambda[id] = metrics.lambda[id]   + dt*( b_i[0]*RG_K1.lambda[id] + b_i[1]*RG_K2.lambda[id] + b_i[2]*RG_K3.lambda[id] + b_i[3]*RG_K4.lambda[id] + b_i[4]*RG_K5.lambda[id] );
     metrics.U[id]      = metrics.U[id]        + dt*( b_i[0]*RG_K1.U[id]      + b_i[1]*RG_K2.U[id]      + b_i[2]*RG_K3.U[id]      + b_i[3]*RG_K4.U[id]      + b_i[4]*RG_K5.U[id] );
-    if(id==20){
-      printf("A=%.15f\n",metrics.A[id]);
-      }
+    if(id==0){
+      metrics.Da[id]=0.0;
+      metrics.Db[id]=0.0;
+      metrics.lambda[id]=0.0;
+      metrics.U[id]=0.0;
+    }
   }
 }
 __global__ void next_step_classic(  field_Classic field_C,  field_Classic FC_K1, field_Classic FC_K2, field_Classic FC_K3, field_Classic FC_K4, field_Classic FC_K5){
@@ -738,7 +821,7 @@ __global__ void next_step_classic(  field_Classic field_C,  field_Classic FC_K1,
 }
 __global__ void next_step_quantum(  field_Quantum field_Q,  field_Quantum FQ_K1, field_Quantum FQ_K2, field_Quantum FQ_K3, field_Quantum FQ_K4, field_Quantum FQ_K5, int g){
   int id = g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
-  if(id<dim_q){
+  if(id < 6*dim_q){
 
     field_Q.real.u[id]   = field_Q.real.u[id]   + dt*( b_i[0]* FQ_K1.real.u[id]     + b_i[1]* FQ_K2.real.u[id]    + b_i[2]* FQ_K3.real.u[id]    + b_i[3]* FQ_K4.real.u[id]    + b_i[4]* FQ_K5.real.u[id]);
     field_Q.real.pi[id]  = field_Q.real.pi[id]  + dt*( b_i[0]* FQ_K1.real.pi[id]    + b_i[1]* FQ_K2.real.pi[id]   + b_i[2]* FQ_K3.real.pi[id]   + b_i[3]* FQ_K4.real.pi[id]   + b_i[4]* FQ_K5.real.pi[id]);
@@ -869,10 +952,10 @@ __device__ double initial_A(double A, int i, double r, double cosmological_const
   }
   dr_psi /= dr;
   if(r==0){
-    sol = A*(r*pow(dr_psi,2)*0.5 + r*A*cosmological_constant);
+    sol = A*(pow(dr_psi,2)*0.5*r + r*A*cosmological_constant);
   }
   else{
-    sol = A*( (1.0-A)/r + r*pow(dr_psi,2)*0.5 + r*A*cosmological_constant);
+    sol = A*( (1.0-A)/r + r*pow(dr_psi,2)*0.5 + ct*r*A*cosmological_constant);
   }
 
   return sol;
@@ -991,9 +1074,9 @@ int main() {
     double (*_host_a_ij)[5]=(double(*)[5])a_temp;
 
     //Copiamos los coeficientes del runge kutta del host al device
-    cudaMemcpyToSymbol(a_ij, _host_a_ij, sizeof(_host_a_ij));
-    cudaMemcpyToSymbol(b_i , _host_b_i,  sizeof(_host_b_i));
-    cudaMemcpyToSymbol(c_i , _host_c_i,  sizeof(_host_c_i));
+    cudaMemcpyToSymbol(a_ij, _host_a_ij, 25*sizeof(double));
+    cudaMemcpyToSymbol(b_i , _host_b_i,  5*sizeof(double));
+    cudaMemcpyToSymbol(c_i , _host_c_i,  5*sizeof(double));
 
 
     // Asignar memoria para la estructura en el host
@@ -1116,14 +1199,16 @@ int main() {
     dim3  grid_radial ((int)ceil((float)Nr/thread));
     dim3  grid_quantum ((int)ceil((float)dim_q/thread));
     printf("thread = %d , block_radial = %d, block_quantum = %d \n", thread , (int)Nr/thread,(int)ceil((float)(Nr*Nk*Nl)/thread)  );
-    printf("Nk = %d | Nl = %d | dr = %f | dt = %f | dk = %lf |\n",Nk,Nl, dr,dt,dk);
+    printf("Nr = %d | Nt = %d | Nk = %d | Nl = %d | dr = %f | dt = %f | dk = %lf |\n",Nr,Nt,Nk,Nl, dr,dt,dk);
     printf("Amplitud = %f | width = %f\n",amplitude,width);
 
 
     //Metrica y campo clasico   
     metric_initial<<<grid_radial,bloque>>>( field_C,  metrics, cosmological_constant);
     double mass;
+    A_RK<<<1,1>>>( metrics, cosmological_constant);
 
+    cudaDeviceSynchronize();
     //Campo cuantico
     field_Quantum host_field_Q;
     host_field_Q.real.u =(double*)malloc(bytes_Q);
@@ -1144,10 +1229,10 @@ int main() {
             mass=1.0;
           }
           else if(g==2 || g==4){
-            mass=sqrt(3.0);
+            mass=1*sqrt(3.0);
           }
           else if(g==5){
-            mass=sqrt(4.0);
+            mass=1*sqrt(4.0);
           }
           quantum_initial( host_field_Q, k, l, g*dim_q, mass);
         }
@@ -1168,7 +1253,7 @@ int main() {
     cudaDeviceSynchronize();
 
     for (int g=0; g < 6; g++){
-        Tensor_energy_momentum <<< grid_radial, bloque >>>(rho, ja, SA, SB, metrics, field_C, field_Q, g);
+        Tensor_energy_momentum <<< grid_radial, bloque >>>(rho, ja, SA, SB, metrics, field_C, field_Q, g,1);
     }
 
       cost_cosm_value<<<1,1>>>(rho,cosmological_constant);
@@ -1202,12 +1287,13 @@ int main() {
 
 
     for (int t=0 ; t<Nt ;t++){
+      printf("t : %d\n",t);
         Tensor_tt<<< grid_radial, bloque >>>(cuda_T_tt, cuda_T_rr, cuda_T_tr, cuda_T_00, rho, SA, ja, SB, t);
         cudaDeviceSynchronize();
 
         T_zeros <<< grid_radial, bloque >>>(rho, ja, SA,SB);
         for (int g=0; g < 6; g++){
-          Tensor_energy_momentum <<< grid_radial, bloque >>>(rho, ja, SA, SB, metrics, field_C, field_Q, g);
+          Tensor_energy_momentum <<< grid_radial, bloque >>>(rho, ja, SA, SB, metrics, field_C, field_Q, g,0);
         }
         cudaDeviceSynchronize();
 
