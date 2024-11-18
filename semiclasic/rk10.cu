@@ -39,20 +39,38 @@
 // Derivate
 
 #define order 11
-__device__ double coefficient_centrada[11] ={-7.93650794e-04,  9.92063492e-03, -5.95238095e-02,  2.38095238e-01,
+__device__ double diff_tenth_order[order] ={-7.93650794e-04,  9.92063492e-03, -5.95238095e-02,  2.38095238e-01,
     -8.33333333e-01,  0.00000000e+00,  8.33333333e-01, -2.38095238e-01,
      5.95238095e-02, -9.92063492e-03,  7.93650794e-04,
   };
-#define half_order_right (int)(order+1)/2
-#define half_order_left (int)(order-1)/2
+#define half_order_tenth_right (int)(order+1)/2
+#define half_order_tenth_left (int)(order-1)/2
+
+/*
+#define derivate_twelfth 13
+__device__ double diff_twelfth_order[derivate_twelfth] = {1.,  -12.,   66., -220.,  495., -792.,  924., -792.,  495.,
+   -220.,   66., -12.,1.
+  };
+#define half_derivate_twelfth_right (int)(derivate_twelfth+1)/2
+#define half_derivate_twelfth_left (int)(derivate_twelfth-1)/2
+*/
+
+#define derivate_twelfth 5
+__device__ double diff_twelfth_order[derivate_twelfth] = {1.,-4.,6.,-4.,1.};
+#define half_derivate_twelfth_right (int)(derivate_twelfth+1)/2
+#define half_derivate_twelfth_left (int)(derivate_twelfth-1)/2
+
+
+#define epsilon_metric_field 0.1
+#define epsilon_quantum_field 0.5
 // Parameter
 #define Nr 500
 #define dr 0.025
-#define Nt 100
+#define Nt 500
 #define dt dr/4.0
 
 //Parameter classic
-#define amplitude 0.0
+#define amplitude 5.0
 #define width 1.5
 // Parameter quantum
 #define Nk 5
@@ -92,6 +110,21 @@ struct field_Quantum{
 
 
 //guardado de diferentes salidas.
+void guardar_salida_phi(double *data,int T) {
+  FILE *fp = fopen("campo_escalar.dat", "wb");
+  fwrite(data, sizeof(double), Nr*T, fp);
+  fclose(fp);
+}
+void guardar_salida_alpha(double *data,int T) {
+  FILE *fp = fopen("g_tt.dat", "wb");
+  fwrite(data, sizeof(double), Nr*T, fp);
+  fclose(fp);
+}
+void guardar_salida_A(double *data,int T) {
+  FILE *fp = fopen("g_rr.dat", "wb");
+  fwrite(data, sizeof(double), Nr*T, fp);
+  fclose(fp);
+}
 void guardar_salida_rho(double *data,int T) {
   FILE *fp = fopen("rho.dat", "wb");
   fwrite(data, sizeof(double), Nr*T, fp);
@@ -112,23 +145,27 @@ void guardar_salida_SB(double *data,int T) {
     fwrite(data, sizeof(double), Nr*T, fp);
     fclose(fp);
   }
-
+  void guardar_salida_geo(double *data,int T) {
+    FILE *fp = fopen("geodesicas.dat", "wb");
+    fwrite(data, sizeof(double), Nr*T, fp);
+    fclose(fp);
+  }
 __device__ double psi_dot(Relativity_G metrics, double *field_pi, int id_nodo, int idx){
     double temp,sym;
     double f,fm1,fp1;
     temp = 0.0;
-    if (idx < half_order_left){
+    if (idx < half_order_tenth_left){
         sym=1.0;
-        for (int m=0; m < half_order_right + idx ; m++){
+        for (int m=0; m < half_order_tenth_right + idx ; m++){
             f= metrics.alpha[m]/(sqrt(metrics.A[m])*metrics.B[m]) * field_pi[id_nodo + m];
-            temp += coefficient_centrada[m + half_order_left -idx ]*(f);
+            temp += diff_tenth_order[m + half_order_tenth_left -idx ]*(f);
         }
-        for (int m=half_order_left - idx; m > 0 ; m--){
+        for (int m=half_order_tenth_left - idx; m > 0 ; m--){
             f= metrics.alpha[m]/(sqrt(metrics.A[m])*metrics.B[m]) * field_pi[id_nodo + m];
-            temp += sym*coefficient_centrada[ half_order_left - idx - m  ]*(f);
+            temp += sym*diff_tenth_order[ half_order_tenth_left - idx - m  ]*(f);
         }
     }
-    else if (idx > Nr-half_order_left-1 && idx < Nr-1){
+    else if (idx > Nr-half_order_tenth_left-1 && idx < Nr-1){
         fm1=metrics.alpha[idx-1]/(sqrt(metrics.A[idx-1])*metrics.B[idx-1]) * field_pi[id_nodo + idx-1];
         fp1=metrics.alpha[idx+1]/(sqrt(metrics.A[idx+1])*metrics.B[idx+1]) * field_pi[id_nodo + idx+1];
 
@@ -142,8 +179,8 @@ __device__ double psi_dot(Relativity_G metrics, double *field_pi, int id_nodo, i
     }
     else{
         for (int m=0;m<order;m++){
-            f=metrics.alpha[idx-half_order_left+m]/(sqrt(metrics.A[idx-half_order_left+m])*metrics.B[idx-half_order_left+m]) * field_pi[id_nodo + idx-half_order_left+m];
-            temp += coefficient_centrada[m]*f;
+            f=metrics.alpha[idx-half_order_tenth_left+m]/(sqrt(metrics.A[idx-half_order_tenth_left+m])*metrics.B[idx-half_order_tenth_left+m]) * field_pi[id_nodo + idx-half_order_tenth_left+m];
+            temp += diff_tenth_order[m]*f;
         }
     }
     temp=temp/dr;
@@ -154,20 +191,20 @@ __device__ double f_pi_dot(field_Classic field_C, Relativity_G metrics, int idx)
   double f,fm1,fp1;
   temp=0.0;
 
-  if (idx < half_order_left){
+  if (idx < half_order_tenth_left){
       sym=1.0;
-      for (int m=0; m < half_order_right + idx ; m++){
+      for (int m=0; m < half_order_tenth_right + idx ; m++){
             f=metrics.alpha[m]*metrics.B[m] * field_C.psi[m]/sqrt(metrics.A[m]);
-            temp += coefficient_centrada[m + half_order_left -idx ]*(f);
+            temp += diff_tenth_order[m + half_order_tenth_left -idx ]*(f);
       }
-      for (int m=half_order_left - idx; m > 0 ; m--){
+      for (int m=half_order_tenth_left - idx; m > 0 ; m--){
 
             f=metrics.alpha[m]*metrics.B[m] * field_C.psi[m]/sqrt(metrics.A[m]);
-            temp += sym*coefficient_centrada[ half_order_left - idx - m  ]*(f);
+            temp += sym*diff_tenth_order[ half_order_tenth_left - idx - m  ]*(f);
       }
     
   }
-  else if (idx > Nr-half_order_left-1 && idx < Nr-1){
+  else if (idx > Nr-half_order_tenth_left-1 && idx < Nr-1){
 
     
       fm1=metrics.alpha[idx-1]*metrics.B[idx-1] * field_C.psi[idx-1]/sqrt(metrics.A[idx-1]);
@@ -183,8 +220,8 @@ __device__ double f_pi_dot(field_Classic field_C, Relativity_G metrics, int idx)
   }
   else{
       for (int m=0;m<order;m++){
-          f=metrics.alpha[idx-half_order_left+m]*metrics.B[idx-half_order_left+m] * field_C.psi[idx-half_order_left+m]/sqrt(metrics.A[idx-half_order_left+m]);
-          temp += coefficient_centrada[m]*f;
+          f=metrics.alpha[idx-half_order_tenth_left+m]*metrics.B[idx-half_order_tenth_left+m] * field_C.psi[idx-half_order_tenth_left+m]/sqrt(metrics.A[idx-half_order_tenth_left+m]);
+          temp += diff_tenth_order[m]*f;
       }
   }
   temp=temp/dr;
@@ -196,19 +233,19 @@ __device__ double derivate_metric(Relativity_G metrics, int idx){
     temp=0.0;
 
 
-    if (idx < half_order_left){
+    if (idx < half_order_tenth_left){
         sym=1.0;
-        for (int m=0; m < half_order_right + idx ; m++){
+        for (int m=0; m < half_order_tenth_right + idx ; m++){
             f=metrics.alpha[m]*metrics.B[m]/sqrt(metrics.A[m]);
-            temp += coefficient_centrada[m + half_order_left -idx ]*(f);
+            temp += diff_tenth_order[m + half_order_tenth_left -idx ]*(f);
         }
-        for (int m=half_order_left - idx; m > 0 ; m--){
+        for (int m=half_order_tenth_left - idx; m > 0 ; m--){
             f=metrics.alpha[m]*metrics.B[m]/sqrt(metrics.A[m]);
-            temp += sym*coefficient_centrada[ half_order_left - idx - m  ]*(f);
+            temp += sym*diff_tenth_order[ half_order_tenth_left - idx - m  ]*(f);
         }
       
     }
-    else if (idx > Nr-half_order_left-1 && idx < Nr-1){
+    else if (idx > Nr-half_order_tenth_left-1 && idx < Nr-1){
         fm1=metrics.alpha[idx-1]*metrics.B[idx-1]/sqrt(metrics.A[idx-1]);
         fp1=metrics.alpha[idx+1]*metrics.B[idx+1]/sqrt(metrics.A[idx+1]);
 
@@ -222,8 +259,8 @@ __device__ double derivate_metric(Relativity_G metrics, int idx){
     }
     else{
         for (int m=0;m<order;m++){
-            f=metrics.alpha[idx-half_order_left+m]*metrics.B[idx-half_order_left+m]/sqrt(metrics.A[idx-half_order_left+m]);
-            temp += coefficient_centrada[m]*f;
+            f=metrics.alpha[idx-half_order_tenth_left+m]*metrics.B[idx-half_order_tenth_left+m]/sqrt(metrics.A[idx-half_order_tenth_left+m]);
+            temp += diff_tenth_order[m]*f;
         }
     }
     temp=temp/dr;
@@ -235,7 +272,7 @@ __device__ double derivate( double *f, int id_nodo, int idx, int symmetric ){
   
       temp=0.0;
   
-      if (idx < half_order_left){
+      if (idx < half_order_tenth_left){
         if (symmetric==0){
           sym=1.0;
         }
@@ -243,33 +280,155 @@ __device__ double derivate( double *f, int id_nodo, int idx, int symmetric ){
           sym=-1.0;
         }
   
-        for (int m=0; m < half_order_right + idx ; m++){
+        for (int m=0; m < half_order_tenth_right + idx ; m++){
   
-            temp += coefficient_centrada[m + half_order_left -idx ]*(f[id_nodo + m]);
+            temp += diff_tenth_order[m + half_order_tenth_left -idx ]*(f[id_nodo + m]);
   
   
           }
-        for (int m=half_order_left - idx; m > 0 ; m--){
+        for (int m=half_order_tenth_left - idx; m > 0 ; m--){
   
-            temp += sym*coefficient_centrada[ half_order_left - idx - m  ]*(f[id_nodo + m]);
+            temp += sym*diff_tenth_order[ half_order_tenth_left - idx - m  ]*(f[id_nodo + m]);
   
           }
         
       }
-      else if (idx > Nr-half_order_left-1 && idx < Nr-1){
-        temp = (0.5*f[id_nodo + idx+1] - 0.5*f[id_nodo + idx-1]); 
+      else if (idx > Nr-half_order_tenth_left-1 && idx < Nr-1){
+        //temp = (0.5*f[id_nodo + idx+1] - 0.5*f[id_nodo + idx-1]); 
+        temp =0.0;
       }
       else if (idx == Nr-1){
-        temp = (f[id_nodo + idx] - f[id_nodo + idx-1]);
+        //temp = (f[id_nodo + idx] - f[id_nodo + idx-1]);
+        temp=0.0;
       }
       else{
         for (int m=0;m<order;m++){
-          temp += coefficient_centrada[m]*f[id_nodo + idx-half_order_left+m];
+          temp += diff_tenth_order[m]*f[id_nodo + idx-half_order_tenth_left+m];
         }
       }
       temp=temp/dr;
       return temp;
 }
+
+__device__ double twelfth_derivate( double *f, int id_nodo, int idx, int symmetric ){
+  double temp,sym;
+
+    temp=0.0;
+
+    if (idx < half_derivate_twelfth_left){
+      if (symmetric==0){
+        sym=1.0;
+      }
+      else if (symmetric == 1){
+        sym=-1.0;
+      }
+
+      for (int m=0; m < half_derivate_twelfth_right + idx ; m++){
+
+          temp += diff_twelfth_order[m + half_derivate_twelfth_left -idx ]*(f[id_nodo + m]);
+
+
+        }
+      for (int m=half_derivate_twelfth_left - idx; m > 0 ; m--){
+
+          temp += sym*diff_twelfth_order[ half_derivate_twelfth_left - idx - m  ]*(f[id_nodo + m]);
+
+        }
+      
+    }
+    else if (idx > Nr-half_derivate_twelfth_left-1 && idx < Nr-1){
+      temp = (0.5*f[id_nodo + idx+1] - 0.5*f[id_nodo + idx-1]); 
+    }
+    else if (idx == Nr-1){
+      temp = (f[id_nodo + idx] - f[id_nodo + idx-1]);
+    }
+    else{
+      for (int m=0;m<derivate_twelfth;m++){
+        temp += diff_twelfth_order[m]*f[id_nodo + idx-half_derivate_twelfth_left+m];
+      }
+    }
+    temp = temp/pow(dr,1);
+    return temp;
+}
+
+//G representa la derivada temporal, es decir los K_i de runge kutta
+__global__ void Kreiss_Oliger(double *G, double *R_temp, double epsilon,int symmetric, int g, int planck){
+  int id = g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
+  int id_nodo = threadIdx.x + blockDim.x*blockIdx.x;;
+  int r = id_nodo%Nr;
+  int k = (int)id_nodo/Nr%Nk;
+  int l = (int)id_nodo/Nr/Nl;
+  int id_nodo_ghost =g*dim_q +l*Nr*Nk + k*Nr;
+  if  (planck==0){
+    if(r<Nr){
+      G[r] = G[r] - epsilon*pow(dr,0)*twelfth_derivate(R_temp, 0, r,symmetric);
+      if (id_nodo==0 ){
+        //printf("d12: %.15f | R = %.15f\n",twelfth_derivate(R_temp, id_nodo_ghost, r,symmetric),R_temp[id]);
+      }
+    }
+  }
+  else if (planck==1){
+    if(id < 6*dim_q){
+      G[id] = G[id] - epsilon*pow(dr,0)*twelfth_derivate(R_temp, id_nodo_ghost, r,symmetric);
+
+    }
+  }
+}
+__global__ void guardar_G(double *R, double *R_temp, int g, int planck){
+  int id = g*dim_q + threadIdx.x + blockDim.x*blockIdx.x;
+  int id_nodo = threadIdx.x + blockDim.x*blockIdx.x;;
+  int r = id_nodo%Nr;
+  //int k = (int)id_nodo/Nr%Nk;
+  //int l = (int)id_nodo/Nr/Nl;
+  //int id_nodo_ghost =g*dim_q +l*Nr*Nk + k*Nr;
+  if  (planck==0){
+    if(r<Nr){
+      R_temp[r] = R[r];
+    }
+  }
+  else if(planck==1){
+    if(id_nodo<dim_q){
+      R_temp[id_nodo] = R[id];
+    }
+  }
+
+
+}
+void llamada_kernel(double *G, double* R,  double epsilon,int symmetric,int g, int block, int thread, int planck){
+
+  //guardar_G<<<block,thread>>>(R,R_temp,g,planck);
+  cudaDeviceSynchronize();
+  Kreiss_Oliger<<<block,thread>>>(G,R,epsilon,symmetric,g,planck);
+  cudaDeviceSynchronize();
+}
+void dissipacion( Relativity_G RG_K, field_Classic FC_K, field_Quantum FQ_K, Relativity_G y_tilde_M, field_Classic y_tilde_C, field_Quantum y_tilde_Q, int bloque_radial, int bloque_cuantico, int thread){
+
+  llamada_kernel(RG_K.A       ,y_tilde_M.A       , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.B       ,y_tilde_M.B       , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.alpha   ,y_tilde_M.alpha   , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.Da      ,y_tilde_M.Da      , epsilon_metric_field, 1, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.Db      ,y_tilde_M.Db      , epsilon_metric_field, 1, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.K       ,y_tilde_M.K       , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.Kb      ,y_tilde_M.Kb      , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.lambda  ,y_tilde_M.lambda  , epsilon_metric_field, 1, 0, bloque_radial,thread, 0);
+  llamada_kernel(RG_K.U       ,y_tilde_M.U       , epsilon_metric_field, 1, 0, bloque_radial,thread, 0);
+
+  llamada_kernel(FC_K.phi      ,y_tilde_C.phi      , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+  llamada_kernel(FC_K.psi      ,y_tilde_C.psi      , epsilon_metric_field, 1, 0, bloque_radial,thread, 0);
+  llamada_kernel(FC_K.pi       ,y_tilde_C.pi       , epsilon_metric_field, 0, 0, bloque_radial,thread, 0);
+
+  for (int g =0 ; g<6 ;g++){
+    llamada_kernel(FQ_K.real.u    ,y_tilde_Q.real.u     , epsilon_quantum_field, 0, g, bloque_cuantico,thread, 1);
+    llamada_kernel(FQ_K.real.psi  ,y_tilde_Q.real.psi   , epsilon_quantum_field, 1, g, bloque_cuantico,thread, 1);
+    llamada_kernel(FQ_K.real.pi   ,y_tilde_Q.real.pi    , epsilon_quantum_field, 0, g, bloque_cuantico,thread, 1);
+
+    llamada_kernel(FQ_K.imag.u    ,y_tilde_Q.imag.u     , epsilon_quantum_field, 0, g, bloque_cuantico,thread, 1);
+    llamada_kernel(FQ_K.imag.psi  ,y_tilde_Q.imag.psi   , epsilon_quantum_field, 1, g, bloque_cuantico,thread, 1);
+    llamada_kernel(FQ_K.imag.pi   ,y_tilde_Q.imag.pi    , epsilon_quantum_field, 0, g, bloque_cuantico,thread, 1);
+  }
+  
+}
+
 __global__ void cost_cosm_value(double *rho,double *cosmological_constant){
   //cosmological_constant[0] = pow(2.0,4)/pow(2.0*consta_pi,2)*log(pow(3.0,9)/pow(2.0,16))/8.0;
   cosmological_constant[0] = -rho[0];
@@ -291,7 +450,15 @@ __global__ void Tensor_tt(double * T_tt,double * T_rr,double * T_tr,double * T_0
     
   }
 }
+__global__ void guardar_datos(double *f,double *alpha_temp, double *A_temp, Relativity_G metrics ,field_Classic field,int t){
+  int idx = threadIdx.x + blockDim.x*blockIdx.x;
+  if(idx<Nr){
+    f[ t*Nr + idx] = field.phi[idx];
+    alpha_temp[ t*Nr + idx] = metrics.alpha[idx];
+    A_temp[ t*Nr + idx] = metrics.A[idx];
 
+  }
+}
 __global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, double *SB, Relativity_G metrics, field_Classic field_C, field_Quantum field_Q, int g, int siono){
     int idx = threadIdx.x + blockDim.x*blockIdx.x;
     int id;
@@ -418,10 +585,10 @@ __global__ void Tensor_energy_momentum(double *rho, double *ja, double *SA, doub
         if(idx==0 && siono==0 && g==5){
           printf("Stress_Energy en  idx : %d of g : %d:\n",idx,g); 
     
-            printf(" <x|PI|x>^2 = %1.5f\n",xpi2x);
-            printf(" <x|psi|x>^2 = %1.5f\n",xpsi2x);
-            printf(" <x|PI psi|x>^2 = %1.5f\n",xpi_psix);
-            printf(" <x|theta|x>^2 = %1.5f\n",xtheta2x);
+            printf(" <x|PI|x>^2 = %.15f\n",xpi2x);
+            printf(" <x|psi|x>^2 = %.15f\n",xpsi2x);
+            printf(" <x|PI psi|x>^2 = %.15f\n",xpi_psix);
+            printf(" <x|theta|x>^2 = %.15f\n",xtheta2x);
             //printf(" <x|phi|x>^2 = %1.5f\n",temp_array[ 4*Nl*Nr + idx ]);
             printf("alpha : %.15f\n",metrics.alpha[idx]);
         
@@ -595,9 +762,15 @@ __global__ void evo_fields_quantums(  field_Quantum field_Q, field_Quantum field
 
       field_Q_RK.real.u[id] = metrics.alpha[r]/(sqrt(metrics.A[r])*metrics.B[r]) * field_Q.real.pi[id];
       field_Q_RK.imag.u[id] = metrics.alpha[r]/(sqrt(metrics.A[r])*metrics.B[r]) * field_Q.imag.pi[id];
+      if(r==0){
+        temp[0] = 0.0;
+        temp[1] = 0.0;
+      }
+      else{
+        temp[0] = psi_dot(metrics, field_Q.real.pi, id_nodo_ghost ,r);
+        temp[1] = psi_dot(metrics, field_Q.imag.pi, id_nodo_ghost ,r);
+      }
 
-      temp[0] = psi_dot(metrics, field_Q.real.pi, id_nodo_ghost ,r);
-      temp[1] = psi_dot(metrics, field_Q.imag.pi, id_nodo_ghost ,r);
 
       field_Q_RK.real.psi[id] = temp[0];
       field_Q_RK.imag.psi[id] = temp[1];
@@ -725,9 +898,12 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
     double *rho, double *ja, double *SA, double *SB, double *Cosm ){
       int thread = 64;
       ////Simulacion////
-      dim3  bloque(thread);
-      dim3  grid_radial ((int)ceil((float)Nr/thread));
-      dim3  grid_quantum ((int)ceil((float)dim_q/thread));
+      //dim3  bloque(thread);
+      //dim3  grid_radial ((int)ceil((float)Nr/thread));
+      //dim3  grid_quantum ((int)ceil((float)dim_q/thread));
+      int bloque =thread;
+      int grid_radial =(int)ceil((float)Nr/thread);
+      int grid_quantum=  ((int)ceil((float)dim_q/thread));
     //ciclo for de la cantidad de pasos
     for(int s=0 ; s<step  ; s++){
 
@@ -752,6 +928,9 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             for (int g=0; g < 6; g++){
               evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K1,  y_tilde_M,g,s);
             }
+            cudaDeviceSynchronize();
+
+            dissipacion(RG_K1,FC_K1,FQ_K1, y_tilde_M,y_tilde_C,y_tilde_Q,grid_radial,grid_quantum,bloque);
         }
         else if(s==1){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K2, rho, ja, SA, SB, Cosm);
@@ -759,6 +938,10 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             for (int g=0; g < 6; g++){
               evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K2,  y_tilde_M, g,s);
             }
+            cudaDeviceSynchronize();
+
+            dissipacion(RG_K2,FC_K2,FQ_K2, y_tilde_M,y_tilde_C,y_tilde_Q,grid_radial,grid_quantum,bloque);
+
         }
         else if(s==2){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K3, rho, ja, SA, SB, Cosm);
@@ -766,6 +949,10 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             for (int g=0; g < 6; g++){
               evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K3,  y_tilde_M, g,s);
             }
+            cudaDeviceSynchronize();
+
+            dissipacion(RG_K3,FC_K3,FQ_K3, y_tilde_M,y_tilde_C,y_tilde_Q,grid_radial,grid_quantum,bloque);
+
         }
         else if(s==3){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K4, rho, ja, SA, SB, Cosm);
@@ -773,6 +960,10 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             for (int g=0; g < 6; g++){
               evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K4,  y_tilde_M, g,s);
             }
+            cudaDeviceSynchronize();
+
+            dissipacion(RG_K4,FC_K4,FQ_K4, y_tilde_M,y_tilde_C,y_tilde_Q,grid_radial,grid_quantum,bloque);
+
         }
         else if(s==4){
             evo_metrics         <<< grid_radial, bloque >>>( y_tilde_M, RG_K5, rho, ja, SA, SB, Cosm);
@@ -780,6 +971,10 @@ void RK_implicit_tenth(Relativity_G metrics, Relativity_G RG_K1,Relativity_G RG_
             for (int g=0; g < 6; g++){
               evo_fields_quantums <<< grid_quantum, bloque >>>( y_tilde_Q,  FQ_K5,  y_tilde_M, g,s);
             }
+            cudaDeviceSynchronize();
+
+            dissipacion(RG_K5,FC_K5,FQ_K5, y_tilde_M,y_tilde_C,y_tilde_Q,grid_radial,grid_quantum,bloque);
+
         }
     }
 }
@@ -870,6 +1065,25 @@ __global__ void zeros_RK( Relativity_G RG_K1,Relativity_G RG_K2, Relativity_G RG
 
     }
 }
+
+__global__ void calc_geodesic(double *Geodesic, Relativity_G metrics, int t){
+  int idx =threadIdx.x + blockDim.x*blockIdx.x;
+  double radio;
+  if(idx<Nr){
+    if(idx==0){
+      radio = dr;
+    }
+    else{
+      radio = idx*dr;
+    }
+    Geodesic[ t*Nr + idx ] = (2.0/radio + metrics.Db[idx])/sqrt(metrics.A[idx]) - 2.0*metrics.Kb[idx];
+    if(idx==0){
+      printf("geodesic[0] : %.15f\n",Geodesic[t*Nr]);
+
+    } 
+  }
+}
+
 void cargar_coeficcientes(double *a_ij,double *b_i, double *c_i){
     FILE *arch_a;
     arch_a=fopen("a_ij.npy","rb");
@@ -929,13 +1143,13 @@ __device__ double initial_A(double A, int i, double r, double cosmological_const
  //double c_atrasada[3]={1.5, -2.0, 0.5};
   dr_psi=0.0;
   if (i < (int)(order-1)/2){
-    for (int m=0; m < half_order_right + i ; m++){
+    for (int m=0; m < half_order_tenth_right + i ; m++){
       rs= r + dr*m;
-      dr_psi += coefficient_centrada[m + (int)(order-1)/2 -i ]*initial_psi(rs);
+      dr_psi += diff_tenth_order[m + (int)(order-1)/2 -i ]*initial_psi(rs);
       }
     for (int m=(int)(order-1)/2 - i; m > 0 ; m--){
       rs= r + dr*m;
-      dr_psi += -1.0*coefficient_centrada[ (int)(order-1)/2 - i - m  ]*initial_psi(rs);
+      dr_psi += -1.0*diff_tenth_order[ (int)(order-1)/2 - i - m  ]*initial_psi(rs);
       } 
   }
   else if (i > Nr-(int)(order-1)/2-1 && i<Nr-1){
@@ -947,7 +1161,7 @@ __device__ double initial_A(double A, int i, double r, double cosmological_const
   else{
     for (int m=0;m<order;m++){
       rs= r + dr*(m-(int)(order-1)/2);
-      dr_psi += coefficient_centrada[m]*initial_psi(rs);
+      dr_psi += diff_tenth_order[m]*initial_psi(rs);
     }
   }
   dr_psi /= dr;
@@ -1277,20 +1491,38 @@ int main() {
     double *T_rr, *cuda_T_rr;
     double *T_tr, *cuda_T_tr;
     double *T_00, *cuda_T_00;
+    double *cuda_xphix;
+    double *cuda_alpha;
+    double *cuda_A;
+
+    double *cuda_geodesic;
+
     cudaMalloc((void **)&(cuda_T_tt), Nt*Nr*sizeof(double)); 
     cudaMalloc((void **)&(cuda_T_tr), Nt*Nr*sizeof(double)); 
     cudaMalloc((void **)&(cuda_T_rr), Nt*Nr*sizeof(double)); 
     cudaMalloc((void **)&(cuda_T_00), Nt*Nr*sizeof(double)); 
+    cudaMalloc((void **)&(cuda_xphix), Nt*Nr*sizeof(double)); 
+    cudaMalloc((void **)&(cuda_alpha), Nt*Nr*sizeof(double)); 
+    cudaMalloc((void **)&(cuda_A), Nt*Nr*sizeof(double)); 
+
+    cudaMalloc((void **)&(cuda_geodesic), Nt*Nr*sizeof(double)); 
 
     //double *Nodos;
 
-
+    //Array dissipacion
+    double *R_temp;
+    cudaMalloc((void **)&(R_temp), Nr*sizeof(double)); 
+    double *R_temp_q;
+    cudaMalloc((void **)&(R_temp_q), dim_q*sizeof(double)); 
 
     for (int t=0 ; t<Nt ;t++){
       printf("t : %d\n",t);
         Tensor_tt<<< grid_radial, bloque >>>(cuda_T_tt, cuda_T_rr, cuda_T_tr, cuda_T_00, rho, SA, ja, SB, t);
         cudaDeviceSynchronize();
-
+        guardar_datos<<< grid_radial, bloque >>>(cuda_xphix,cuda_alpha,cuda_A,metrics, field_C, t);
+        cudaDeviceSynchronize();
+        calc_geodesic<<< grid_radial, bloque >>>(cuda_geodesic, metrics,t);
+        cudaDeviceSynchronize();
         T_zeros <<< grid_radial, bloque >>>(rho, ja, SA,SB);
         for (int g=0; g < 6; g++){
           Tensor_energy_momentum <<< grid_radial, bloque >>>(rho, ja, SA, SB, metrics, field_C, field_Q, g,0);
@@ -1340,14 +1572,33 @@ int main() {
       cudaMemcpy(T_tr, cuda_T_tr ,Nt*bytes_Nr,cudaMemcpyDeviceToHost);
       cudaMemcpy(T_00, cuda_T_00 ,Nt*bytes_Nr,cudaMemcpyDeviceToHost);
 
+      double *xphix,*alpha,*A;
+      xphix =(double*)malloc(Nt*bytes_Nr);
+      alpha =(double*)malloc(Nt*bytes_Nr);
+      A =(double*)malloc(Nt*bytes_Nr);
+
+      cudaMemcpy(xphix, cuda_xphix, Nt*bytes_Nr,cudaMemcpyDeviceToHost);
+      cudaMemcpy(alpha, cuda_alpha, Nt*bytes_Nr,cudaMemcpyDeviceToHost);
+      cudaMemcpy(A, cuda_A, Nt*bytes_Nr,cudaMemcpyDeviceToHost);
+
+      double *geo;
+      geo =(double*)malloc(Nt*bytes_Nr);
+      cudaMemcpy(geo, cuda_geodesic, Nt*bytes_Nr,cudaMemcpyDeviceToHost);
+
       //guardar salida Tensor energia momentum
-      for(int i =0; i<Nt;i++){
-        printf("rho[%d]=%0.15f\n",i,T_tt[i*Nr + 20]);
-      }
+      //for(int i =0; i<Nt;i++){
+        //printf("rho[%d]=%0.15f\n",i,T_tt[i*Nr + 20]);
+      //}
+      guardar_salida_phi(xphix,Nt);
+      guardar_salida_alpha(alpha,Nt);
+      guardar_salida_A(A,Nt);
+
       guardar_salida_rho(T_tt,Nt);
       guardar_salida_SA(T_rr,Nt);
       guardar_salida_ja(T_tr,Nt);
       guardar_salida_SB(T_00,Nt);
+
+      guardar_salida_geo(geo,Nt);
 
       size_t free_memory, total_memory;
       cudaMemGetInfo( &free_memory, &total_memory );
