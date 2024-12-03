@@ -23,9 +23,7 @@ donde  \($\Psi_2$\) es un componente del escalar de Weyl en el formalismo de New
 ### 3. **Masa de Komar**:
 La masa de Komar es útil para sistemas estáticos o estacionarios. Está definida a partir de la simetría temporal del espacio-tiempo, usando el vector de Killing asociado a esta simetría (\($\xi^\mu$\)):
 
-$
-M_\text{Komar} = \frac{1}{4\pi} \int_\Sigma R_{\mu\nu} n^\mu \xi^\nu \, \sqrt{\gamma} \, d^3x,
-$
+$M_\text{Komar} = \frac{1}{4\pi} \int_\Sigma R_{\mu\nu} n^\mu \xi^\nu \, \sqrt{\gamma} \, d^3x$
 
 o, alternativamente, como una integral sobre el infinito espacial:
 
