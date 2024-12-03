@@ -45,9 +45,9 @@ M_\text{BH} \propto (p - p_c)^\gamma,
 $
 
 donde:
-- $\(p\)$ es un parámetro que describe las condiciones iniciales del sistema.
-- $\(p_c\)$ es el valor crítico donde ocurre el colapso.
--$ \(\gamma\)$ es un exponente crítico universal (aproximadamente $\(0.37\)$ para un campo escalar masivo).
+- \(p\) es un parámetro que describe las condiciones iniciales del sistema.
+- \(p_c\) es el valor crítico donde ocurre el colapso.
+-  \($\gamma$\) es un exponente crítico universal (aproximadamente $\(0.37\)$ para un campo escalar masivo).
 
 Este resultado muestra que, cerca del umbral crítico, la masa del agujero negro es extremadamente sensible a las condiciones iniciales. Es una propiedad emergente del colapso crítico y revela un comportamiento fractal en las soluciones.
 
