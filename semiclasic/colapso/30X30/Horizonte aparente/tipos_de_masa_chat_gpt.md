@@ -12,16 +12,16 @@ donde $\(h_{ij} = \gamma_{ij} - \delta_{ij}\)$ representa las desviaciones de la
 ---
 
 ### 2. **Masa de Bondi**:
-La masa de Bondi se utiliza para describir la energía de un espacio-tiempo en el infinito **futuro nulo** ($\(\mathscr{I}^+\)$), lo que la hace relevante para sistemas radiantes (por ejemplo, emisiones de ondas gravitacionales). Se define como:
+La masa de Bondi se utiliza para describir la energía de un espacio-tiempo en el infinito **futuro nulo** (\($\mathscr{I}^+$\)), lo que la hace relevante para sistemas radiantes (por ejemplo, emisiones de ondas gravitacionales). Se define como:
 
 $M_\text{Bondi} = \frac{1}{4\pi} \int_{S^2} \Psi_2 \, d\Omega$
 
-donde $ \(\Psi_2\)$ es un componente del escalar de Weyl en el formalismo de Newman-Penrose, que describe las curvaturas gravitacionales lejanas.
+donde  \($\Psi_2$\) es un componente del escalar de Weyl en el formalismo de Newman-Penrose, que describe las curvaturas gravitacionales lejanas.
 
 ---
 
 ### 3. **Masa de Komar**:
-La masa de Komar es útil para sistemas estáticos o estacionarios. Está definida a partir de la simetría temporal del espacio-tiempo, usando el vector de Killing asociado a esta simetría ($\(\xi^\mu\)$):
+La masa de Komar es útil para sistemas estáticos o estacionarios. Está definida a partir de la simetría temporal del espacio-tiempo, usando el vector de Killing asociado a esta simetría (\($\xi^\mu$\)):
 
 $
 M_\text{Komar} = \frac{1}{4\pi} \int_\Sigma R_{\mu\nu} n^\mu \xi^\nu \, \sqrt{\gamma} \, d^3x,
