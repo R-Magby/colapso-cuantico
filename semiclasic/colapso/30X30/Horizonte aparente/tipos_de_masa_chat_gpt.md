@@ -7,7 +7,7 @@ Esta masa describe la energía total de un espacio-tiempo asintóticamente plano
 
 $M_\text{ADM} = \frac{1}{16\pi} \int_{S^2_\infty} \left( \partial^j h_{ij} - \partial_i h^j_j \right) dS^i,$
 
-donde \(h_{ij} = \gamma_{ij} - \delta_{ij}\) representa las desviaciones de la métrica respecto a la métrica plana. Es útil en simulaciones con el formalismo ADM.
+donde $\(h_{ij} = \gamma_{ij} - \delta_{ij}\)$ representa las desviaciones de la métrica respecto a la métrica plana. Es útil en simulaciones con el formalismo ADM.
 
 ---
 
