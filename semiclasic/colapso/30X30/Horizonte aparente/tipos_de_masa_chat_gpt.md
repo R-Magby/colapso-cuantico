@@ -3,7 +3,7 @@
 ---
 
 ### 1. **Masa ADM (Arnowitt-Deser-Misner)**:
-Esta masa describe la energía total de un espacio-tiempo asintóticamente plano y se calcula en el infinito espacial. Es adecuada para sistemas aislados y se define usando las propiedades de la métrica en el límite lejano ($\($r $\to$ $\infty$$\)$):
+Esta masa describe la energía total de un espacio-tiempo asintóticamente plano y se calcula en el infinito espacial. Es adecuada para sistemas aislados y se define usando las propiedades de la métrica en el límite lejano (\(r $\to$ $\infty$\)):
 
 $M_\text{ADM} = \frac{1}{16\pi} \int_{S^2_\infty} \left( \partial^j h_{ij} - \partial_i h^j_j \right) dS^i,$
 
